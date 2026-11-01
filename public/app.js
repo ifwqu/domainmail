@@ -117,7 +117,8 @@ function counterpartAddr(m) {
   return m.from || '';
 }
 
-// ---------- 登录 ----------
+const MAIL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
+
 function renderAuth(mode = 'login') {
   const app = document.getElementById('app');
   app.replaceChildren();
@@ -156,13 +157,39 @@ function renderAuth(mode = 'login') {
 
   passInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 
-  const card = h('div', { class: 'auth-card' },
-    h('div', { class: 'auth-logo' }, h('span', { class: 'logo-mark', text: '✉' }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
-    h('h1', { text: mode === 'login' ? '欢迎回来' : '创建账号' }),
-    h('div', { class: 'sub', text: mode === 'login' ? '登录你的自建邮箱' : '注册新的邮箱地址' }),
-    h('div', { class: 'auth-tabs' },
-      h('button', { class: mode === 'login' ? 'on' : '', onClick: () => renderAuth('login') }, '登录'),
-      h('button', { class: mode === 'register' ? 'on' : '', onClick: () => renderAuth('register') }, '注册'),
+  // 轮播文案（参考 参考实现）
+  const SLIDES = [
+    { l1: '让沟通，', l2: '简单一点。', domain: '发送、收信，都在一个页面。' },
+    { l1: '邮件有序，', l2: '查找更轻松。', domain: '全文搜索，附件直达。' },
+    { l1: '一个账户，', l2: '管理多个邮箱。', domain: '无限别名，随时切换身份。' },
+  ];
+  let slideIdx = 0;
+  const h1l1 = h('span', { class: 'l1', text: SLIDES[0].l1 });
+  const h1l2 = h('span', { class: 'l2', text: SLIDES[0].l2 });
+  const domainNote = h('span', { text: SLIDES[0].domain });
+  let slideTimer = null;
+
+  const startSlides = () => {
+    clearInterval(slideTimer);
+    slideTimer = setInterval(() => {
+      slideIdx = (slideIdx + 1) % SLIDES.length;
+      const s = SLIDES[slideIdx];
+      h1l1.textContent = s.l1;
+      h1l2.textContent = s.l2;
+      domainNote.textContent = s.domain;
+    }, 4000);
+  };
+  startSlides();
+
+  const logoEl = h('span', { class: 'portal-logo', html: MAIL_SVG });
+  const brandName = h('span', { text: '域名邮箱' });
+
+  const card = h('div', { class: 'login-card' },
+    h('h1', { text: mode === 'login' ? '登录邮箱' : '注册账号' }),
+    h('div', { class: 'sub', text: mode === 'login' ? '使用你的邮箱地址登录' : '创建新的邮箱账号' }),
+    h('div', { class: 'login-tabs' },
+      h('button', { class: mode === 'login' ? 'on' : '', onClick: () => { clearInterval(slideTimer); renderAuth('login'); startSlides(); } }, '登录'),
+      h('button', { class: mode === 'register' ? 'on' : '', onClick: () => { clearInterval(slideTimer); renderAuth('register'); startSlides(); } }, '注册'),
     ),
     errBox, okBox,
     h('div', { class: 'field' }, h('label', { text: '邮箱地址' }), emailInput),
@@ -171,7 +198,27 @@ function renderAuth(mode = 'login') {
     h('button', { class: 'btn primary block', onClick: submit }, mode === 'login' ? '登录' : '创建账号'),
   );
 
-  app.append(h('div', { class: 'auth-wrap' }, card));
+  const root = h('div', { class: 'portal' },
+    h('header', { class: 'portal-header' },
+      h('div', { class: 'portal-brand' }, logoEl, brandName),
+    ),
+    h('main', { class: 'portal-main' },
+      h('section', { class: 'portal-hero' },
+        h('div', { class: 'portal-tag' }, h('span', { class: 'line' }), h('span', { text: 'DOMAIN MAIL' })),
+        h('h1', { class: 'portal-h1' }, h1l1, h1l2),
+        h('div', { class: 'portal-domain' }, domainNote),
+        h('div', { class: 'portal-features' },
+          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', text: '∞' }), h('span', { text: '无限别名地址' })),
+          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', text: '⇄' }), h('span', { text: '多身份一键切换' })),
+          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', text: '✓' }), h('span', { text: 'DKIM 签名直达收件箱' })),
+        ),
+      ),
+      card,
+    ),
+    h('footer', { class: 'portal-footer' }, '© 2026 域名邮箱 · 自建邮件服务'),
+  );
+
+  app.append(root);
   setTimeout(() => emailInput.focus(), 50);
 }
 
@@ -185,7 +232,7 @@ function renderShell() {
   const foot = h('div', { class: 'sidebar-foot' });
 
   const sidebar = h('aside', { class: 'sidebar' },
-    h('div', { class: 'brand' }, h('span', { class: 'dot', text: '✉' }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
+    h('div', { class: 'brand' }, h('span', { class: 'dot', html: MAIL_SVG }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
     h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
     h('button', { class: 'compose-btn', onClick: () => openCompose() },
       h('span', { class: 'ico', text: '✎' }), h('span', { class: 'txt', text: '写邮件' })),
