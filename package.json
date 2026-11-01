@@ -1,0 +1,19 @@
+{
+  "name": "domsmtp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "自建域名邮箱系统：SMTP 收信 + Submission 发信 + IMAP + Webmail + 管理后台 + DKIM",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "bin": {
+    "domsmtp": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "node --watch src/main.js",
+    "init": "node src/cli.js init",
+    "test": "node test/e2e.js"
+  }
+}

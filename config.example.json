@@ -1,0 +1,97 @@
+{
+  "hostname": "mail.example.com",
+  "brand": "域名邮箱",
+  "dataDir": "./data",
+  "log": { "level": "info", "file": "./data/logs/mail.log" },
+
+  "http": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8080,
+    "adminPath": "/admin",
+    "trustProxy": true,
+    "allowSelfRegister": false,
+    "registerDomains": [],
+    "sessionTtlSeconds": 604800,
+    "admin": { "email": "admin@example.com", "password": "请改成强密码" }
+  },
+
+  "smtp": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 25,
+    "maxMessageBytes": 26214400,
+    "maxRecipients": 100,
+    "checkHelo": true,
+    "checkPtr": "warn",
+    "checkSpf": "warn",
+    "rejectUnknownSenderDomain": true,
+    "rateLimitPerIpPerMinute": 600
+  },
+
+  "submission": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 587,
+    "requireTls": false,
+    "maxMessageBytes": 26214400,
+    "rateLimitPerUserPerMinute": 120
+  },
+
+  "imap": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 143,
+    "tlsPort": 993,
+    "requireTls": false,
+    "maxConnectionsPerIp": 60
+  },
+
+  "outbound": {
+    "enabled": true,
+    "pollIntervalMs": 5000,
+    "maxAttempts": 8,
+    "retryBaseSeconds": 60,
+    "maxBackoffSeconds": 21600,
+    "concurrency": 4,
+    "allowPrivateRelay": false,
+    "relay": {
+      "enabled": false,
+      "type": "smtp",
+      "host": "",
+      "port": 587,
+      "secure": false,
+      "user": "",
+      "pass": "",
+      "apiKey": ""
+    }
+  },
+
+  "tls": {
+    "certFile": "./data/tls/cert.pem",
+    "keyFile": "./data/tls/key.pem",
+    "selfSignedNames": ["mail.example.com"],
+    "minVersion": "TLSv1.2"
+  },
+
+  "dkim": {
+    "autoGenerate": true,
+    "keyBits": 2048,
+    "selector": "mail",
+    "canonicalization": "relaxed/relaxed",
+    "algorithm": "rsa-sha256"
+  },
+
+  "antispam": {
+    "enabled": true,
+    "spamThreshold": 5,
+    "rejectScore": 100,
+    "keywords": ["viagra", "casino", "代开发票", "博彩", "刷单", "兼职日结", "贷款秒批"],
+    "keywordScore": 2,
+    "suspiciousTlds": [".top", ".xyz", ".click", ".loan", ".work", ".buzz", ".icu"],
+    "suspiciousTldScore": 1,
+    "shoutScore": 1,
+    "emptyBodyScore": 1,
+    "blacklistFile": "./data/blacklist.txt"
+  }
+}

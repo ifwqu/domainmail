@@ -1,0 +1,7 @@
+node_modules/
+data/
+*.log
+config.json
+config.local.json
+.DS_Store
+*.eml

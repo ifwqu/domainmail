@@ -1,0 +1,43 @@
+# 域名邮箱系统 — Docker 部署
+# 用法：
+#   1. 修改下面 config.json 挂载目录里的配置（或首次启动自动生成）
+#   2. docker compose up -d
+#   3. docker compose logs -f
+
+services:
+  domainmail:
+    build: .
+    image: domainmail:latest
+    container_name: domainmail
+    restart: unless-stopped
+    hostname: mail.example.com
+    ports:
+      - "25:25"       # SMTP 收信（必须，公网可达）
+      - "587:587"     # SMTP 提交（客户端发信）
+      - "143:143"     # IMAP（不加 TLS，客户端用 STARTTLS）
+      - "993:993"     # IMAPS（如需隐式 TLS）
+      - "8080:8080"   # Web / Webmail / 管理后台
+    volumes:
+      - ./data:/app/data
+      - ./config.json:/app/config.json:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - NODE_ENV=production
+    # 25 端口需要宿主直通，不能用 userland-proxy
+    sysctls:
+      - net.core.somaxconn=4096
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/auth/register-config').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
