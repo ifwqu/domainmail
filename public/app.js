@@ -8,6 +8,7 @@ const state = {
   view: 'mail', // mail | settings | admin | aliases
   adminTab: 'overview',
   search: '',
+  filter: null, // all | unread | flagged | attach
   compose: null,
   attachments: [],
   // 当前使用的邮箱身份（主邮箱或别名），null = 主邮箱
@@ -511,11 +512,11 @@ function renderMail(toolbar, content) {
     h('div', { class: 'search-box' },
       h('span', { class: 'ico', text: '🔍' }), searchInput),
     h('button', {
-      class: 'btn sm', title: '刷新', onClick: () => { loadMessages(); renderFolders(); },
+      class: 'btn sm ghost', title: '刷新', onClick: () => { loadMessages(); renderFolders(); },
     }, '刷新'),
     state.folder === 'Trash'
       ? h('button', {
-          class: 'btn sm danger', onClick: async () => {
+          class: 'btn sm ghost danger', onClick: async () => {
             if (!confirm('清空垃圾箱？此操作不可恢复。')) return;
             await api(`/api/folders/${state.folder}/empty`, { method: 'POST' });
             toast('已清空');
@@ -526,9 +527,28 @@ function renderMail(toolbar, content) {
       : null,
   );
 
+  // 筛选栏（参考实现 mail-filter-bar）
+  const filterBar = h('div', { class: 'filter-bar' },
+    ...[
+      { key: 'all', label: '全部邮件' },
+      { key: 'unread', label: '未读邮件' },
+      { key: 'flagged', label: '星标邮件' },
+      { key: 'attach', label: '有附件' },
+    ].map((f) =>
+      h('button', {
+        class: `chip ${state.filter === f.key || (!state.filter && f.key === 'all') ? 'on' : ''}`,
+        onClick: () => {
+          state.filter = f.key === 'all' ? null : f.key;
+          renderView();
+          renderFolders();
+        },
+      }, f.label)
+    )
+  );
+
   const list = h('div', { class: `list-pane ${state.selected ? 'with-read' : ''}` });
   const read = h('div', { class: 'read-pane' });
-  content.append(list, read);
+  content.append(filterBar, list, read);
   state.refs.list = list;
   state.refs.read = read;
 
@@ -566,28 +586,60 @@ function renderList() {
     );
     return;
   }
-  list.replaceChildren(
-    ...state.messages.map((m) => {
+  // 列表表头（参考实现 sticky grid）
+  const head = h('div', { class: 'list-head' },
+    h('span'),
+    h('span', { text: '发件人' }),
+    h('span', { text: '主题' }),
+    h('span', { style: 'text-align:right', text: '时间' }),
+  );
+
+  const rows = state.messages
+    .filter((m) => {
+      if (state.filter === 'unread') return !m.seen;
+      if (state.filter === 'flagged') return m.flagged;
+      if (state.filter === 'attach') return m.hasAttachment;
+      return true;
+    })
+    .map((m) => {
       const who = counterpartName(m);
       const addr = counterpartAddr(m);
+      const isSent = state.folder === 'Sent' || state.folder === 'Drafts';
       return h('div', {
         class: `mail-item ${m.seen ? '' : 'unread'} ${state.selected?.id === m.id ? 'on' : ''}`,
         onClick: () => openMessage(m.id),
       },
         h('span', { class: 'mi-dot' }),
-        h('span', { class: 'mi-avatar', style: `background:${avatarColor(addr || who)}`, text: avatarInitial(who, addr) }),
-        state.folder === 'Sent' || state.folder === 'Drafts'
-          ? h('span', { class: 'mi-from', title: who, text: `致 ${who}` })
-          : h('span', { class: 'mi-from', title: addr, text: who }),
-        h('span', { class: 'mi-sub', text: m.subject || '(无主题)' }),
-        h('span', { class: 'mi-snip', text: ` — ${m.snippet || ''}` }),
-        m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', text: '📎' }) : null,
-        m.flagged ? h('span', { class: 'mi-star', text: '★' }) : null,
-        m.spamScore >= 5 ? h('span', { class: 'mi-tag-warn', text: '垃圾' }) : null,
+        h('span', { class: 'mi-from', title: addr },
+          h('span', { class: 'mi-avatar', text: avatarInitial(who, addr) }),
+          h('span', { class: 'mi-from-text', text: isSent ? `致 ${who}` : who }),
+        ),
+        h('span', { class: 'mi-sub' },
+          h('span', { class: 'mi-subject', text: m.subject || '(无主题)' }),
+          h('span', { class: 'mi-snip', text: m.snippet ? `— ${m.snippet}` : '' }),
+          h('span', { class: 'mi-icons' },
+            m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', text: '📎' }) : null,
+            m.flagged ? h('span', { class: 'mi-star', text: '★' }) : null,
+            m.spamScore >= 5 ? h('span', { class: 'mi-tag-warn', text: '垃圾' }) : null,
+          ),
+        ),
         h('span', { class: 'mi-time', text: fmtTime(m.date) }),
       );
-    })
-  );
+    });
+
+  if (!rows.length) {
+    list.replaceChildren(
+      h('div', { class: 'empty' },
+        h('div', { style: 'text-align:center' },
+          h('div', { class: 'empty-ico', text: state.search ? '🔍' : '📭' }),
+          h('div', { text: state.search ? '没有匹配的邮件' : '这个文件夹是空的' }),
+        ),
+      ),
+    );
+    return;
+  }
+
+  list.replaceChildren(head, ...rows);
 }
 
 async function openMessage(id) {
@@ -617,64 +669,77 @@ function renderReader(m) {
   read.replaceChildren();
 
   const isJunk = m.folder === 'Junk';
-  const actions = h('div', { class: 'read-actions' },
-    h('button', { class: 'btn sm', onClick: () => openCompose({ to: m.from, subject: `Re: ${m.subject}`, inReplyTo: m.messageId }) }, '回复'),
-    h('button', { class: 'btn sm', onClick: () => openCompose({ to: m.from, subject: `Fwd: ${m.subject}`, text: `\n\n-------- 转发邮件 --------\n发件人: ${m.from}\n日期: ${fmtFull(m.date)}\n主题: ${m.subject}\n\n${m.text}` }) }, '转发'),
-    h('button', {
-      class: 'btn sm', onClick: async () => {
-        await api(`/api/messages/${m.id}/flags`, { method: 'POST', body: { add: ['\\Flagged'] } });
-        toast('已加星标'); loadMessages();
-      },
-    }, '★ 星标'),
-    isJunk
-      ? h('button', {
-          class: 'btn sm', onClick: async () => {
-            await api(`/api/messages/${m.id}/move`, { method: 'POST', body: { folder: 'INBOX' } });
-            toast('已移到收件箱'); state.selected = null; loadMessages(); renderFolders(); renderEmptyRead();
-          },
-        }, '非垃圾')
-      : null,
-    m.folder !== 'Trash'
-      ? h('button', {
-          class: 'btn sm danger', onClick: async () => {
-            await api(`/api/messages/${m.id}/move`, { method: 'POST', body: { folder: 'Trash' } });
-            toast('已移到垃圾箱'); state.selected = null; loadMessages(); renderFolders(); renderEmptyRead();
-          },
-        }, '删除')
-      : h('button', {
-          class: 'btn sm danger', onClick: async () => {
-            if (!confirm('彻底删除这封邮件？')) return;
-            await api(`/api/messages/${m.id}`, { method: 'DELETE' });
-            toast('已删除'); state.selected = null; loadMessages(); renderFolders(); renderEmptyRead();
-          },
-        }, '彻底删除'),
-    h('a', { class: 'btn sm', href: `/api/messages/${m.id}/raw`, download: '' }, '下载原文'),
+  const backBtn = h('button', {
+    class: 'btn sm ghost', title: '返回列表',
+    onClick: () => { state.selected = null; renderView(); renderFolders(); },
+  }, '← 返回');
+
+  // 参考实现: mail-reader-toolbar h-14 border-b
+  const readerBar = h('div', { class: 'reader-toolbar' },
+    h('div', { class: 'left' },
+      backBtn,
+      h('button', {
+        class: 'btn sm ghost', title: '回复',
+        onClick: () => openCompose({ to: m.from, subject: `Re: ${m.subject}`, inReplyTo: m.messageId }),
+      }, '回复'),
+      h('button', {
+        class: 'btn sm ghost', title: '转发',
+        onClick: () => openCompose({ to: m.from, subject: `Fwd: ${m.subject}`, text: `\n\n-------- 转发邮件 --------\n发件人: ${m.from}\n日期: ${fmtFull(m.date)}\n主题: ${m.subject}\n\n${m.text}` }),
+      }, '转发'),
+      h('button', {
+        class: 'btn sm ghost', title: '星标',
+        onClick: async () => {
+          await api(`/api/messages/${m.id}/flags`, { method: 'POST', body: { add: ['\\Flagged'] } });
+          toast('已加星标'); loadMessages();
+        },
+      }, '★'),
+    ),
+    h('div', { class: 'left' },
+      isJunk
+        ? h('button', {
+            class: 'btn sm ghost', onClick: async () => {
+              await api(`/api/messages/${m.id}/move`, { method: 'POST', body: { folder: 'INBOX' } });
+              toast('已移到收件箱'); state.selected = null; renderView(); renderFolders();
+            },
+          }, '非垃圾')
+        : null,
+      m.folder !== 'Trash'
+        ? h('button', {
+            class: 'btn sm ghost', title: '移入回收站', onClick: async () => {
+              await api(`/api/messages/${m.id}/move`, { method: 'POST', body: { folder: 'Trash' } });
+              toast('已移入回收站'); state.selected = null; renderView(); renderFolders();
+            },
+          }, '🗑')
+        : h('button', {
+            class: 'btn sm ghost danger', onClick: async () => {
+              if (!confirm('彻底删除这封邮件？')) return;
+              await api(`/api/messages/${m.id}`, { method: 'DELETE' });
+              toast('已删除'); state.selected = null; renderView(); renderFolders();
+            },
+          }, '彻底删除'),
+      h('a', { class: 'btn sm ghost', href: `/api/messages/${m.id}/raw`, download: '' }, '原文'),
+    ),
   );
 
   const initial = (m.fromName || m.from || '?').trim().charAt(0).toUpperCase();
 
-  read.append(
-    h('div', { class: 'read-head' },
-      h('div', { class: 'read-subject', text: m.subject || '(无主题)' }),
-      h('div', { class: 'read-meta' },
-        h('div', { class: 'avatar', style: `background:${avatarColor(m.from)}`, text: initial }),
-        h('div', { class: 'who' },
-          h('div', {}, h('b', { text: m.fromName || m.from }), m.fromName ? ` <${m.from}>` : ''),
-          h('div', { class: 'to', text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
-        ),
-        h('div', { class: 'when', text: fmtFull(m.date) }),
+  const scroll = h('div', { class: 'read-scroll' },
+    h('div', { class: 'read-subject', text: m.subject || '(无主题)' }),
+    h('div', { class: 'read-meta' },
+      h('div', { class: 'avatar', text: initial }),
+      h('div', { class: 'who' },
+        h('div', {}, h('b', { text: m.fromName || m.from }), m.fromName ? ` <${m.from}>` : ''),
+        h('div', { class: 'to', text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
       ),
-      actions,
+      h('div', { class: 'when', text: fmtFull(m.date) }),
     ),
   );
 
+  read.append(readerBar, scroll);
+
   const body = h('div', { class: 'read-body' });
   if (m.html) {
-    // 沙箱化 HTML：iframe srcdoc，禁脚本
-    const iframe = h('iframe', {
-      style: 'width:100%;border:0;min-height:320px;background:#fff',
-      sandbox: 'allow-same-origin',
-    });
+    const iframe = h('iframe', { sandbox: 'allow-same-origin' });
     iframe.srcdoc = `<!DOCTYPE html><meta charset="utf-8"><base target="_blank"><style>body{margin:0;font:14px/1.6 -apple-system,"Segoe UI","PingFang SC",sans-serif;color:#1c2024;word-break:break-word}img{max-width:100%}</style>${m.html}`;
     iframe.onload = () => {
       try {
@@ -686,22 +751,24 @@ function renderReader(m) {
   } else {
     body.append(h('pre', { text: m.text || '(无正文)' }));
   }
-  read.append(body);
+  scroll.append(body);
 
   if (m.attachments?.length) {
-    const att = h('div', { class: 'att-list' },
-      h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:10px', text: `附件 ${m.attachments.length} 个` }),
-      ...m.attachments.map((a) =>
-        h('a', { class: 'att-item', href: `/api/attachments/${a.id}`, download: a.filename },
-          h('span', { text: '📎' }),
-          h('span', { text: a.filename }),
-          h('span', { class: 'sz', text: fmtSize(a.size) }),
-        )
-      ),
+    scroll.append(
+      h('div', { class: 'att-list' },
+        h('div', { style: 'font-size:12px;color:hsl(var(--muted-foreground));margin-bottom:10px', text: `附件 ${m.attachments.length} 个` }),
+        ...m.attachments.map((a) =>
+          h('a', { class: 'att-item', href: `/api/attachments/${a.id}`, download: a.filename },
+            h('span', { text: '📎' }),
+            h('span', { text: a.filename }),
+            h('span', { class: 'sz', text: fmtSize(a.size) }),
+          )
+        ),
+      )
     );
-    read.append(att);
   }
 }
+
 
 function renderEmptyRead() {
   const read = state.refs.read;
