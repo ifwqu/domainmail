@@ -172,7 +172,8 @@ export class WebServer {
       'Content-Length': body.length,
       'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
     });
-    ctx.res.end(body);
+    // HEAD 只返回头
+    ctx.res.end(ctx.req.method === 'HEAD' ? undefined : body);
     return true;
   }
 
@@ -180,8 +181,10 @@ export class WebServer {
   async handle(req, res) {
     const ctx = this.context(req, res);
     try {
+      // HEAD 按 GET 处理（路由 + 静态资源），仅省略响应体
+      const effective = req.method === 'HEAD' ? 'GET' : req.method;
       for (const r of this.routes) {
-        if (r.method !== req.method) continue;
+        if (r.method !== effective) continue;
         const m = r.regex.exec(ctx.url.pathname);
         if (!m) continue;
         r.keys.forEach((k, i) => (ctx.params[k] = decodeURIComponent(m[i + 1])));
@@ -193,23 +196,30 @@ export class WebServer {
         if (out !== undefined && !res.writableEnded) {
           if (typeof out === 'object' && out !== null && out.__raw !== undefined) {
             res.writeHead(out.status || 200, out.headers || {});
-            res.end(out.__raw);
-          } else {
+            res.end(req.method === 'HEAD' ? undefined : out.__raw);
+          } else if (req.method !== 'HEAD') {
             this.json(ctx, 200, out);
+          } else {
+            const body = JSON.stringify(out);
+            res.writeHead(200, {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Content-Length': Buffer.byteLength(body),
+            });
+            res.end();
           }
         }
         return;
       }
 
-      if (req.method === 'GET' && this.serveStatic(ctx)) return;
+      if (effective === 'GET' && this.serveStatic(ctx)) return;
 
       // SPA 兜底
-      if (req.method === 'GET' && !ctx.url.pathname.startsWith('/api/')) {
+      if (effective === 'GET' && !ctx.url.pathname.startsWith('/api/')) {
         const index = path.join(PUBLIC_DIR, 'index.html');
         if (fs.existsSync(index)) {
           const body = fs.readFileSync(index);
           res.writeHead(200, { 'Content-Type': MIME['.html'], 'Content-Length': body.length });
-          res.end(body);
+          res.end(req.method === 'HEAD' ? undefined : body);
           return;
         }
       }
