@@ -93,12 +93,9 @@ const FOLDER_LABEL = {
 };
 const FOLDER_ICON = { INBOX: '📥', Sent: '📤', Drafts: '📝', Trash: '🗑', Junk: '⚠️' };
 
-// 首字头像配色（按地址哈希稳定取色）
-const AVATAR_COLORS = ['#d3e3fd', '#d7f1d5', '#fde293', '#f8d0ce', '#d8c8f5', '#c8e8f5', '#fde2c8'];
-function avatarColor(seed) {
-  let hash = 0;
-  for (const ch of String(seed || '')) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+// 首字头像：shadcn 风格统一使用 muted 灰，不抢视觉
+function avatarColor() {
+  return 'hsl(var(--muted))';
 }
 function avatarInitial(name, addr) {
   const src = (name || addr || '?').trim();
