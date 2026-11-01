@@ -16,6 +16,14 @@ export function isValidEmail(s) {
   return EMAIL_RE.test(normalizeEmail(s));
 }
 
+// 生成随机邮箱前缀（用于无限别名）
+export function randomLocalPart(len = 8) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let out = '';
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
 export class AccountService {
   constructor({ cfg, db, store, dkim, outbox }) {
     this.cfg = cfg;
@@ -167,11 +175,21 @@ export class AccountService {
   }
 
   // ---------- 别名 ----------
-  listAliases() {
+  listAliases(userId = null) {
+    if (userId) {
+      const u = this.getUser(userId);
+      // 该用户拥有的别名（目标是本人）
+      return this.db.all('SELECT * FROM aliases ORDER BY address')
+        .filter((a) => {
+          try {
+            return JSON.parse(a.targets).some((t) => String(t).toLowerCase() === u.email.toLowerCase());
+          } catch { return false; }
+        });
+    }
     return this.db.all('SELECT * FROM aliases ORDER BY address');
   }
 
-  createAlias(address, targets) {
+  createAlias(address, targets, { ownerId = null, skipLimit = false } = {}) {
     const addr = normalizeEmail(address);
     const list = (Array.isArray(targets) ? targets : String(targets).split(/[,;\s]+/))
       .map(normalizeEmail).filter(Boolean);
@@ -179,11 +197,47 @@ export class AccountService {
     if (!list.length) throw new DomainError('至少需要一个目标地址');
     if (this.db.get('SELECT id FROM users WHERE email = ?', addr)) throw new DomainError('该地址已是真实账号');
     if (this.db.get('SELECT id FROM aliases WHERE address = ?', addr)) throw new DomainError('别名已存在');
+
+    // 域名必须存在
+    const domain = addr.split('@')[1];
+    const d = this.db.get('SELECT * FROM domains WHERE name = ?', domain);
+    if (!d) throw new DomainError('该域名未添加');
+    if (!d.active) throw new DomainError('该域名已停用');
+
+    // 用户自建别名数量限制（0 = 无限）
+    if (ownerId && !skipLimit) {
+      const limit = Number(this.cfg.alias?.maxPerUser ?? 0);
+      if (limit > 0) {
+        const u = this.getUser(ownerId);
+        const owned = this.listAliases(ownerId);
+        if (owned.length >= limit) throw new DomainError(`每个账号最多创建 ${limit} 个别名`);
+      }
+    }
+
     this.db.run(
-      'INSERT INTO aliases(address, targets, active, created_at) VALUES(?,?,1,?)',
-      addr, JSON.stringify(list), Date.now()
+      'INSERT INTO aliases(address, targets, active, created_at, owner_id) VALUES(?,?,1,?,?)',
+      addr, JSON.stringify(list), Date.now(), ownerId
     );
     return this.db.get('SELECT * FROM aliases WHERE address = ?', addr);
+  }
+
+  // 批量创建别名（一次生成多个随机/指定地址）
+  createAliasBatch({ count = 1, prefix = '', domain, targets, ownerId = null }) {
+    const created = [];
+    const errors = [];
+    const n = Math.min(Math.max(Number(count) || 1, 1), 500);
+    for (let i = 0; i < n; i++) {
+      const local = prefix
+        ? `${prefix}${n > 1 ? `-${i + 1}` : ''}`
+        : randomLocalPart();
+      const addr = `${local}@${domain}`;
+      try {
+        created.push(this.createAlias(addr, targets, { ownerId }));
+      } catch (e) {
+        errors.push(`${addr}: ${e.message}`);
+      }
+    }
+    return { created, errors };
   }
 
   updateAlias(id, patch) {

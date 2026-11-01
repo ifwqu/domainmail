@@ -30,11 +30,12 @@ function isPrivateIp(ip) {
 }
 
 class SmtpClient {
-  constructor({ host, port, secure = false, timeoutMs = 20000 }) {
+  constructor({ host, port, secure = false, timeoutMs = 20000, family }) {
     this.host = host;
     this.port = port;
     this.secure = secure;
     this.timeoutMs = timeoutMs;
+    this.family = family;
     this.socket = null;
     this.buf = '';
     this.waiters = [];
@@ -44,7 +45,12 @@ class SmtpClient {
 
   connect() {
     return new Promise((resolve, reject) => {
-      const opts = { host: this.host, port: this.port, servername: net.isIP(this.host) ? undefined : this.host };
+      const opts = {
+        host: this.host,
+        port: this.port,
+        servername: net.isIP(this.host) ? undefined : this.host,
+      };
+      if (this.family) opts.family = this.family;
       const sock = this.secure
         ? tls.connect({ ...opts, rejectUnauthorized: false })
         : net.connect(opts);
@@ -278,11 +284,62 @@ export class OutboxQueue {
 
   async deliver({ mailFrom, rcptTo, raw }) {
     const relay = this.cfg.outbound.relay;
-    if (relay.enabled) {
+    const mode = relay.enabled ? (relay.mode || 'always') : 'off';
+
+    if (mode === 'always') {
       if (relay.type === 'resend') return this.deliverViaResend({ mailFrom, rcptTo, raw });
       return this.deliverViaRelay({ mailFrom, rcptTo, raw });
     }
+
+    if (mode === 'fallback') {
+      // 先判断对方 MX 是否有可用 IPv6：没有就直接走中继，避免白等超时
+      const domain = rcptTo.split('@')[1];
+      const hasV6 = domain ? await this.mxHasIpv6(domain) : false;
+
+      if (hasV6) {
+        try {
+          return await this.deliverDirect({ mailFrom, rcptTo, raw });
+        } catch (directErr) {
+          if (directErr.code >= 500 && directErr.code < 600) throw directErr;
+          log.warn(`直连失败，改用中继 ${relay.host}：${directErr.message}`);
+        }
+      } else {
+        log.info(`${domain} 无 IPv6 MX，直接走中继 ${relay.host}`);
+      }
+
+      try {
+        if (relay.type === 'resend') return await this.deliverViaResend({ mailFrom, rcptTo, raw });
+        return await this.deliverViaRelay({ mailFrom, rcptTo, raw });
+      } catch (relayErr) {
+        throw new Error(`中继投递失败：${relayErr.message}`);
+      }
+    }
+
     return this.deliverDirect({ mailFrom, rcptTo, raw });
+  }
+
+  // 判断目标域名的 MX 是否存在 IPv6 地址（带缓存）
+  async mxHasIpv6(domain) {
+    const key = `v6:${domain}`;
+    const hit = this._mxCache?.get(key);
+    if (hit && hit.exp > Date.now()) return hit.val;
+
+    let result = false;
+    try {
+      const mxs = await resolveMx(domain);
+      if (mxs && mxs.length) {
+        for (const mx of mxs.slice(0, 3)) {
+          const v6 = await dns.resolve6(mx.exchange).catch(() => []);
+          if (v6 && v6.length) { result = true; break; }
+        }
+      }
+    } catch {
+      result = false;
+    }
+
+    if (!this._mxCache) this._mxCache = new Map();
+    this._mxCache.set(key, { val: result, exp: Date.now() + 10 * 60 * 1000 });
+    return result;
   }
 
   async deliverDirect({ mailFrom, rcptTo, raw }) {
@@ -295,58 +352,67 @@ export class OutboxQueue {
       throw err;
     }
 
+    const prefer = String(this.cfg.outbound.ipFamily || 'auto').toLowerCase();
+    const order = prefer === 'ipv6' ? [6, 4] : prefer === 'ipv4' ? [4, 6] : [6, 4];
+
     let lastErr = null;
     for (const mx of mxs) {
-      try {
-        let addrs;
-        try {
-          addrs = await dns.resolve4(mx.exchange);
-        } catch {
-          addrs = await dns.resolve6(mx.exchange).catch(() => []);
-        }
-        if (!addrs || !addrs.length) throw new Error(`MX ${mx.exchange} 无法解析`);
+      // 按配置的优先级收集 IPv6 / IPv4 地址
+      const byFamily = { 4: [], 6: [] };
+      if (order.includes(6)) {
+        byFamily[6] = await dns.resolve6(mx.exchange).catch(() => []) || [];
+      }
+      if (order.includes(4)) {
+        byFamily[4] = await dns.resolve4(mx.exchange).catch(() => []) || [];
+      }
+      const addrs = [];
+      for (const fam of order) {
+        for (const ip of byFamily[fam]) addrs.push({ ip, family: fam });
+      }
+      if (!addrs.length) {
+        lastErr = new Error(`MX ${mx.exchange} 无法解析`);
+        continue;
+      }
 
-        for (const ip of addrs) {
-          if (!this.cfg.outbound.allowPrivateRelay && isPrivateIp(ip)) {
-            throw new Error(`拒绝投递到内网地址 ${ip}`);
-          }
-          const client = new SmtpClient({
-            host: ip,
-            port: 25,
-            timeoutMs: this.cfg.outbound.connectTimeoutMs,
-          });
-          try {
-            await client.connect();
-            await client.ehlo(this.heloName);
-            if (client.hasCap('STARTTLS')) {
-              await client.cmd('STARTTLS', [220]);
-              await client.startTls(mx.exchange);
-              await client.ehlo(this.heloName);
-            }
-            await client.cmd(`MAIL FROM:<${mailFrom}>`, [250]);
-            await client.cmd(`RCPT TO:<${rcptTo}>`, [250, 251]);
-            await client.cmd('DATA', [354]);
-            const stuffed = raw.toString('latin1').replace(/\r\n\./g, '\r\n..').replace(/^\./, '..');
-            client.socket.write(stuffed);
-            if (!stuffed.endsWith('\r\n')) client.socket.write('\r\n');
-            client.socket.write('.\r\n');
-            const r = await client.read();
-            if (r.code !== 250) {
-              const err = new Error(`DATA 被拒 ${r.code}: ${r.text}`);
-              err.code = r.code;
-              throw err;
-            }
-            await client.quit();
-            return true;
-          } catch (e) {
-            lastErr = e;
-            client.destroy();
-            if (e.code >= 500 && e.code < 600) throw e;
-          }
+      for (const { ip, family } of addrs) {
+        if (!this.cfg.outbound.allowPrivateRelay && isPrivateIp(ip)) {
+          lastErr = new Error(`拒绝投递到内网地址 ${ip}`);
+          continue;
         }
-      } catch (e) {
-        lastErr = e;
-        if (e.code >= 500 && e.code < 600) throw e;
+        const client = new SmtpClient({
+          host: ip,
+          port: 25,
+          family,
+          timeoutMs: this.cfg.outbound.connectTimeoutMs,
+        });
+        try {
+          await client.connect();
+          await client.ehlo(this.heloName);
+          if (client.hasCap('STARTTLS')) {
+            await client.cmd('STARTTLS', [220]);
+            await client.startTls(mx.exchange);
+            await client.ehlo(this.heloName);
+          }
+          await client.cmd(`MAIL FROM:<${mailFrom}>`, [250]);
+          await client.cmd(`RCPT TO:<${rcptTo}>`, [250, 251]);
+          await client.cmd('DATA', [354]);
+          const stuffed = raw.toString('latin1').replace(/\r\n\./g, '\r\n..').replace(/^\./, '..');
+          client.socket.write(stuffed);
+          if (!stuffed.endsWith('\r\n')) client.socket.write('\r\n');
+          client.socket.write('.\r\n');
+          const r = await client.read();
+          if (r.code !== 250) {
+            const err = new Error(`DATA 被拒 ${r.code}: ${r.text}`);
+            err.code = r.code;
+            throw err;
+          }
+          await client.quit();
+          return true;
+        } catch (e) {
+          lastErr = e;
+          client.destroy();
+          if (e.code >= 500 && e.code < 600) throw e;
+        }
       }
     }
     throw lastErr || new Error('所有 MX 投递失败');

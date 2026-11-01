@@ -43,7 +43,21 @@ export const DEFAULT_CONFIG = {
     trustProxy: true,
     allowSelfRegister: true,
     registerDomains: [],
+    // 注册时是否需要邮箱验证码（需出站投递可用）
+    requireEmailVerify: false,
+    // 新用户默认配额 MB；0 = 无限
+    defaultQuotaMb: 0,
     admin: { email: 'admin@example.com', password: '' },
+  },
+
+  // 无限邮箱：每个账号可创建任意多个别名地址
+  alias: {
+    // 每个账号最多可创建的别名数量；0 = 无限
+    maxPerUser: 0,
+    // 是否允许用户自助创建别名
+    allowSelfCreate: true,
+    // 单次批量创建上限
+    maxBatch: 500,
   },
 
   smtp: {
@@ -91,14 +105,20 @@ export const DEFAULT_CONFIG = {
     socketTimeoutMs: 60000,
     concurrency: 4,
     allowPrivateRelay: false,
+    // 出站 IP 协议族优先级：auto / ipv6 / ipv4
+    // Oracle/AWS 等云厂商常封锁 IPv4 出站 25，但 IPv6 可用 → 设为 ipv6
+    ipFamily: 'auto',
     relay: {
       enabled: false,
+      // always = 全部走中继；fallback = 直连失败才走中继
+      mode: 'fallback',
       type: 'smtp',
       host: '',
       port: 587,
       secure: false,
       user: '',
       pass: '',
+      apiKey: '',
     },
   },
 

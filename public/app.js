@@ -5,11 +5,15 @@ const state = {
   messages: [],
   selected: null,
   folders: [],
-  view: 'mail', // mail | settings | admin
+  view: 'mail', // mail | settings | admin | aliases
   adminTab: 'overview',
   search: '',
   compose: null,
   attachments: [],
+  // 当前使用的邮箱身份（主邮箱或别名），null = 主邮箱
+  mailbox: null,
+  mailboxes: [],
+  aliasOpen: true,
 };
 
 // ---------- API ----------
@@ -89,6 +93,18 @@ const FOLDER_LABEL = {
 };
 const FOLDER_ICON = { INBOX: '📥', Sent: '📤', Drafts: '📝', Trash: '🗑', Junk: '⚠️' };
 
+// 列表行里显示的对方名字
+function counterpartName(m) {
+  const f = state.folder;
+  if (f === 'Sent' || f === 'Drafts') return m.to?.split(',')[0]?.trim() || '（无收件人）';
+  return m.fromName || m.from || '(未知)';
+}
+function counterpartAddr(m) {
+  const f = state.folder;
+  if (f === 'Sent' || f === 'Drafts') return m.to?.split(',')[0]?.trim() || '';
+  return m.from || '';
+}
+
 // ---------- 登录 ----------
 function renderAuth(mode = 'login') {
   const app = document.getElementById('app');
@@ -152,12 +168,16 @@ function renderShell() {
   app.replaceChildren();
 
   const folderList = h('div', { class: 'folder-list' });
+  const aliasPanel = h('div', { class: 'alias-panel' });
   const foot = h('div', { class: 'sidebar-foot' });
 
   const sidebar = h('aside', { class: 'sidebar' },
-    h('div', { class: 'brand' }, h('span', { class: 'dot' }), h('span', { text: '域名邮箱' })),
-    h('button', { class: 'btn primary block compose-btn', onClick: () => openCompose() }, '✎ 写信'),
+    h('div', { class: 'brand' }, h('span', { class: 'dot' }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
+    h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
+    h('button', { class: 'compose-btn', onClick: () => openCompose() },
+      h('span', { class: 'ico', text: '✎' }), h('span', { class: 'txt', text: '写邮件' })),
     folderList,
+    aliasPanel,
     foot,
   );
 
@@ -167,16 +187,189 @@ function renderShell() {
 
   app.append(h('div', { class: 'shell' }, sidebar, main));
 
-  state.refs = { folderList, foot, toolbar, content };
+  state.refs = { folderList, aliasPanel, foot, toolbar, content };
+  renderMailboxSwitcher();
   renderFolders();
+  renderAliasPanel();
   renderFoot();
   renderView();
+}
+
+// ---------- 邮箱切换器 ----------
+async function renderMailboxSwitcher() {
+  const box = document.getElementById('mailbox-switcher');
+  if (!box) return;
+
+  let data;
+  try {
+    data = await api('/api/mailboxes');
+  } catch {
+    box.replaceChildren();
+    return;
+  }
+  state.mailboxes = data.mailboxes || [];
+
+  const current = state.mailbox || state.user?.email || data.current;
+  const cur = state.mailboxes.find((m) => m.address === current) || state.mailboxes[0];
+  const isPrimary = cur?.type === 'primary';
+
+  const label = h('div', { class: 'mb-current' },
+    h('div', { class: 'mb-label' },
+      h('span', { class: 'mb-badge', text: isPrimary ? '主' : '别名' }),
+      h('span', { class: 'mb-addr', text: cur?.address || '' }),
+    ),
+    h('span', { class: 'mb-arrow', text: '▾' }),
+  );
+
+  const menu = h('div', { class: 'mb-menu' });
+  menu.style.display = 'none';
+
+  const renderMenu = () => {
+    menu.replaceChildren(
+      ...state.mailboxes.map((m) =>
+        h('div', {
+          class: `mb-item ${m.address === current ? 'on' : ''}`,
+          onClick: () => switchMailbox(m.address),
+        },
+          h('span', { class: 'mb-badge', text: m.type === 'primary' ? '主' : '别名' }),
+          h('span', { class: 'mb-addr', text: m.address }),
+          m.unread > 0 ? h('span', { class: 'mb-unread', text: String(m.unread) }) : null,
+        )
+      ),
+      state.mailboxes.length > 1
+        ? h('div', {
+            class: 'mb-manage',
+            onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); menu.style.display = 'none'; },
+          }, '管理邮箱地址 →')
+        : h('div', {
+            class: 'mb-manage',
+            onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); menu.style.display = 'none'; },
+          }, '+ 新建邮箱地址'),
+    );
+  };
+
+  label.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = menu.style.display === 'none';
+    renderMenu();
+    menu.style.display = open ? 'block' : 'none';
+  });
+
+  const closeMenu = () => { menu.style.display = 'none'; };
+  document.addEventListener('click', closeMenu, { once: true });
+
+  box.replaceChildren(label, menu);
+}
+
+async function switchMailbox(address) {
+  const primary = state.mailboxes.find((m) => m.type === 'primary')?.address;
+  state.mailbox = address === primary ? null : address;
+  state.selected = null;
+  state.messages = [];
+  state.search = '';
+  state.view = 'mail';
+
+  const menu = document.querySelector('.mb-menu');
+  if (menu) menu.style.display = 'none';
+
+  await renderMailboxSwitcher();
+  await renderFolders();
+  renderView();
+  toast(`已切换到 ${address}`);
+}
+
+// ---------- 侧边栏：我的邮箱地址（无限邮箱） ----------
+async function renderAliasPanel() {
+  const { aliasPanel } = state.refs;
+  if (!aliasPanel) return;
+
+  let data;
+  try {
+    data = await api('/api/aliases');
+  } catch {
+    aliasPanel.replaceChildren();
+    return;
+  }
+
+  const open = state.aliasOpen !== false;
+  const head = h('div', {
+    class: 'alias-head',
+    onClick: () => { state.aliasOpen = !open; renderAliasPanel(); },
+  },
+    h('span', { text: '📮 我的邮箱' }),
+    h('span', { class: 'alias-count', text: String(data.total) }),
+    h('span', { style: 'margin-left:auto;font-size:10px;color:var(--muted)', text: open ? '▾' : '▸' }),
+  );
+
+  if (!open) {
+    aliasPanel.replaceChildren(head);
+    return;
+  }
+
+  const quickInput = h('input', {
+    class: 'alias-quick-input',
+    placeholder: '输入前缀，回车创建',
+  });
+
+  const doQuick = async () => {
+    const prefix = quickInput.value.trim();
+    if (!prefix) return;
+    try {
+      const r = await api('/api/aliases', { method: 'POST', body: { prefix } });
+      quickInput.value = '';
+      toast(`已创建 ${r.alias.address}`);
+      await renderAliasPanel();
+    } catch (e) { toast(e.message); }
+  };
+
+  quickInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doQuick(); });
+
+  const items = data.aliases.slice(0, 8).map((a) =>
+    h('div', { class: 'alias-item', title: a.address },
+      h('span', { class: 'alias-addr', text: a.address.split('@')[0] }),
+      h('button', {
+        class: 'alias-del',
+        title: '删除',
+        onClick: async (e) => {
+          e.stopPropagation();
+          if (!confirm(`删除 ${a.address}？`)) return;
+          await api(`/api/aliases/${a.id}`, { method: 'DELETE' });
+          toast('已删除');
+          await renderAliasPanel();
+        },
+      }, '×'),
+    )
+  );
+
+  aliasPanel.replaceChildren(
+    head,
+    h('div', { class: 'alias-body' },
+      h('div', { class: 'alias-quick' },
+        quickInput,
+        h('button', { class: 'btn sm primary', onClick: doQuick }, '+'),
+      ),
+      data.total > 0
+        ? h('div', { class: 'alias-list' }, ...items)
+        : h('div', { class: 'alias-empty', text: '还没有额外地址' }),
+      data.total > 8
+        ? h('div', {
+            class: 'alias-more',
+            onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); },
+          }, `查看全部 ${data.total} 个 →`)
+        : null,
+      h('div', {
+        class: 'alias-more',
+        onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); },
+      }, '管理 / 批量生成 →'),
+    ),
+  );
 }
 
 async function renderFolders() {
   const { folderList } = state.refs;
   try {
-    const r = await api('/api/folders');
+    const q = state.mailbox ? `?mailbox=${encodeURIComponent(state.mailbox)}` : '';
+    const r = await api('/api/folders' + q);
     state.folders = r.folders;
   } catch {
     state.folders = [];
@@ -187,7 +380,7 @@ async function renderFolders() {
         class: `folder ${state.view === 'mail' && state.folder === f.name ? 'on' : ''}`,
         onClick: () => { state.view = 'mail'; state.folder = f.name; state.selected = null; renderView(); renderFolders(); },
       },
-        h('span', { text: FOLDER_ICON[f.name] || '📁' }),
+        h('span', { class: 'ico', text: FOLDER_ICON[f.name] || '📁' }),
         h('span', { class: 'name', text: FOLDER_LABEL[f.name] || f.name }),
         f.unread > 0
           ? h('span', { class: 'badge', text: String(f.unread) })
@@ -229,7 +422,21 @@ function renderView() {
 
   if (state.view === 'settings') return renderSettings(toolbar, content);
   if (state.view === 'admin') return renderAdmin(toolbar, content);
+  if (state.view === 'aliases') return renderAliasView(toolbar, content);
   return renderMail(toolbar, content);
+}
+
+// ---------- 独立视图：邮箱地址管理 ----------
+async function renderAliasView(toolbar, content) {
+  toolbar.append(
+    h('h2', { text: '我的邮箱地址' }),
+    h('div', { class: 'spacer' }),
+    h('button', { class: 'btn sm', onClick: () => { state.view = 'mail'; renderView(); renderFolders(); } }, '返回邮箱'),
+  );
+  content.replaceChildren(h('div', { class: 'loading-row', text: '加载中…' }));
+
+  const card = await renderAliasCard();
+  content.replaceChildren(h('div', { class: 'admin' }, card));
 }
 
 // ---------- 邮件视图 ----------
@@ -244,7 +451,8 @@ function renderMail(toolbar, content) {
   toolbar.append(
     h('h2', { text: FOLDER_LABEL[state.folder] || state.folder }),
     h('div', { class: 'spacer' }),
-    h('div', { class: 'search-box' }, h('span', { text: '🔍' }), searchInput),
+    h('div', { class: 'search-box' },
+      h('span', { class: 'ico', text: '🔍' }), searchInput),
     h('button', {
       class: 'btn sm', title: '刷新', onClick: () => { loadMessages(); renderFolders(); },
     }, '刷新'),
@@ -261,7 +469,7 @@ function renderMail(toolbar, content) {
       : null,
   );
 
-  const list = h('div', { class: `list-pane ${state.selected ? '' : 'full'}` });
+  const list = h('div', { class: `list-pane ${state.selected ? 'with-read' : ''}` });
   const read = h('div', { class: 'read-pane' });
   content.append(list, read);
   state.refs.list = list;
@@ -278,6 +486,7 @@ async function loadMessages() {
   try {
     const q = new URLSearchParams({ folder: state.folder, limit: '100' });
     if (state.search) q.set('q', state.search);
+    if (state.mailbox) q.set('mailbox', state.mailbox);
     const r = await api(`/api/messages?${q}`);
     state.messages = r.messages;
     renderList();
@@ -299,19 +508,16 @@ function renderList() {
         class: `mail-item ${m.seen ? '' : 'unread'} ${state.selected?.id === m.id ? 'on' : ''}`,
         onClick: () => openMessage(m.id),
       },
-        h('div', { class: 'top' },
-          h('span', { class: 'from', text: m.fromName || m.from || '(未知)' }),
-          h('span', { class: 'time', text: fmtTime(m.date) }),
-        ),
-        h('div', { class: 'subject', text: m.subject }),
-        h('div', { class: 'snippet', text: m.snippet || '' }),
-        (m.hasAttachment || m.flagged || m.spamScore >= 5)
-          ? h('div', { class: 'tags' },
-              m.hasAttachment ? h('span', { class: 'tag', text: '📎 附件' }) : null,
-              m.flagged ? h('span', { class: 'tag', text: '★' }) : null,
-              m.spamScore >= 5 ? h('span', { class: 'tag warn', text: `垃圾 ${m.spamScore}` }) : null,
-            )
-          : null,
+        h('span', { class: 'mi-dot' }),
+        state.folder === 'Sent' || state.folder === 'Drafts'
+          ? h('span', { class: 'mi-from', text: `收件人: ${counterpartName(m)}` })
+          : h('span', { class: 'mi-from', text: counterpartName(m) }),
+        h('span', { class: 'mi-sub', text: m.subject || '(无主题)' }),
+        h('span', { class: 'mi-snip', text: ` — ${m.snippet || ''}` }),
+        m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', text: '📎' }) : null,
+        m.flagged ? h('span', { class: 'mi-star', text: '★' }) : null,
+        m.spamScore >= 5 ? h('span', { class: 'mi-tag-warn', text: '垃圾' }) : null,
+        h('span', { class: 'mi-time', text: fmtTime(m.date) }),
       )
     )
   );
@@ -325,7 +531,7 @@ async function openMessage(id) {
   try {
     const m = await api(`/api/messages/${id}`);
     state.selected = m;
-    if (list) list.classList.remove('full');
+    if (list) { list.classList.remove('full'); list.classList.add('with-read'); }
     state.refs.content?.classList?.add?.('reading');
     const contentEl = read.parentElement;
     if (contentEl) contentEl.classList.add('reading');
@@ -378,15 +584,24 @@ function renderReader(m) {
     h('a', { class: 'btn sm', href: `/api/messages/${m.id}/raw`, download: '' }, '下载原文'),
   );
 
+  const initial = (m.fromName || m.from || '?').trim().charAt(0).toUpperCase();
+  const avatarColor = (() => {
+    const colors = ['#d3e3fd', '#d7f1d5', '#fde293', '#f8d0ce', '#d8c8f5', '#c8e8f5'];
+    let hash = 0;
+    for (const ch of (m.from || '')) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    return colors[hash % colors.length];
+  })();
+
   read.append(
     h('div', { class: 'read-head' },
       h('div', { class: 'read-subject', text: m.subject || '(无主题)' }),
       h('div', { class: 'read-meta' },
-        h('div', {}, h('b', { text: m.fromName || m.from }), m.fromName ? ` <${m.from}>` : ''),
-        h('div', { text: `收件人: ${m.to}` }),
-        m.cc ? h('div', { text: `抄送: ${m.cc}` }) : null,
-        h('div', { text: fmtFull(m.date) }),
-        m.spamScore > 0 ? h('div', { text: `垃圾评分: ${m.spamScore} ${m.spamReason ? `(${m.spamReason})` : ''}` }) : null,
+        h('div', { class: 'avatar', style: `background:${avatarColor}`, text: initial }),
+        h('div', { class: 'who' },
+          h('div', {}, h('b', { text: m.fromName || m.from }), m.fromName ? ` <${m.from}>` : ''),
+          h('div', { class: 'to', text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
+        ),
+        h('div', { class: 'when', text: fmtFull(m.date) }),
       ),
       actions,
     ),
@@ -483,6 +698,7 @@ function openCompose(prefill = {}) {
             text: bodyInput.value,
             attachments: state.attachments.map(({ filename, mime, content }) => ({ filename, mime, content })),
             inReplyTo: prefill.inReplyTo || '',
+            from: state.mailbox || state.user?.email,
           },
         });
         toast(`已发送（本地 ${r.local}，队列 ${r.queued}）`);
@@ -522,13 +738,164 @@ function openCompose(prefill = {}) {
       h('button', { class: 'btn sm', onClick: () => fileInput.click() }, '📎 附件'),
       fileInput,
       h('span', { class: 'spacer' }),
-      h('span', { style: 'font-size:11px;color:var(--muted)', text: `发件人 ${state.user?.email || ''}` }),
+      h('span', { style: 'font-size:11px;color:var(--muted)', text: `发件人 ${state.mailbox || state.user?.email || ''}` }),
     ),
   );
 
   document.body.append(box);
   state.compose = box;
   setTimeout(() => toInput.focus(), 50);
+}
+
+// ---------- 无限邮箱：别名管理卡片 ----------
+async function renderAliasCard() {
+  let data;
+  try {
+    data = await api('/api/aliases');
+  } catch (e) {
+    return h('div', { class: 'card' }, h('h3', { text: '我的邮箱地址' }), h('div', { text: `加载失败：${e.message}` }));
+  }
+
+  const listBox = h('div');
+  const domainSelect = h('select');
+  for (const d of data.domains) domainSelect.append(h('option', { value: d }, `@${d}`));
+  const prefixInput = h('input', { placeholder: '前缀，例如 shop' });
+  const countInput = h('input', { type: 'number', value: '1', min: '1', max: String(data.maxBatch || 500), style: 'width:90px' });
+  const manualInput = h('input', { placeholder: '前缀，例如 contact' });
+  const manualDomain = h('select');
+  for (const d of data.domains) manualDomain.append(h('option', { value: d }, `@${d}`));
+
+  // 前缀输入实时预览完整地址
+  const preview = h('span', { style: 'font-size:12px;color:var(--muted);font-family:ui-monospace,monospace' });
+  const updatePreview = () => {
+    const p = prefixInput.value.trim();
+    preview.textContent = p ? `→ ${p}${domainSelect.value}` : '';
+  };
+  prefixInput.addEventListener('input', updatePreview);
+  domainSelect.addEventListener('change', updatePreview);
+
+  const manualPreview = h('span', { style: 'font-size:12px;color:var(--muted);font-family:ui-monospace,monospace' });
+  const updateManualPreview = () => {
+    const p = manualInput.value.trim();
+    manualPreview.textContent = p ? `→ ${p}${manualDomain.value}` : '';
+  };
+  manualInput.addEventListener('input', updateManualPreview);
+  manualDomain.addEventListener('change', updateManualPreview);
+
+  const renderList = () => {
+    if (!data.aliases.length) {
+      listBox.replaceChildren(h('div', { style: 'color:var(--muted);font-size:13px;padding:8px 0', text: '还没有额外地址，下面创建即可' }));
+      return;
+    }
+    listBox.replaceChildren(
+      h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:8px' },
+        `共 ${data.total} 个地址${data.unlimited ? '（无数量限制）' : ` / 上限 ${data.limit}`}`),
+      h('table', {},
+        h('thead', {}, h('tr', {}, h('th', { text: '邮箱地址' }), h('th', { text: '转发到' }), h('th', { text: '状态' }), h('th', {}, ''))),
+        h('tbody', {}, ...data.aliases.map((a) =>
+          h('tr', {},
+            h('td', {}, h('code', { text: a.address })),
+            h('td', { style: 'font-size:12px', text: a.targets.join(', ') }),
+            h('td', {}, h('span', { class: a.active ? 'badge-ok' : 'badge-off', text: a.active ? '启用' : '停用' })),
+            h('td', { class: 'actions' },
+              h('button', {
+                class: 'btn sm', onClick: async () => {
+                  await api(`/api/aliases/${a.id}`, { method: 'PUT', body: { active: !a.active } });
+                  data = await api('/api/aliases'); renderList(); renderAliasPanel(); toast(a.active ? '已停用' : '已启用');
+                },
+              }, a.active ? '停用' : '启用'),
+              ' ',
+              h('button', {
+                class: 'btn sm danger', onClick: async () => {
+                  if (!confirm(`删除 ${a.address}？`)) return;
+                  await api(`/api/aliases/${a.id}`, { method: 'DELETE' });
+                  data = await api('/api/aliases'); renderList(); renderAliasPanel(); toast('已删除');
+                },
+              }, '删除'),
+            ),
+          )
+        )),
+      ),
+    );
+  };
+  renderList();
+
+  const doBatch = async () => {
+    try {
+      const r = await api('/api/aliases/batch', {
+        method: 'POST',
+        body: {
+          count: Number(countInput.value) || 1,
+          prefix: prefixInput.value.trim(),
+          domain: domainSelect.value,
+        },
+      });
+      data = await api('/api/aliases');
+      renderList();
+      prefixInput.value = '';
+      updatePreview();
+      toast(`已创建 ${r.count} 个地址`);
+      renderAliasPanel();
+      if (r.errors?.length) console.warn('部分失败', r.errors);
+    } catch (e) { toast(e.message); }
+  };
+
+  // 只填前缀即可创建
+  const doManual = async () => {
+    const prefix = manualInput.value.trim();
+    if (!prefix) { toast('请填写前缀'); return; }
+    try {
+      const r = await api('/api/aliases', {
+        method: 'POST',
+        body: { prefix, domain: manualDomain.value },
+      });
+      manualInput.value = '';
+      updateManualPreview();
+      data = await api('/api/aliases');
+      renderList();
+      toast(`已创建 ${r.alias.address}`);
+      renderAliasPanel();
+    } catch (e) { toast(e.message); }
+  };
+
+  // 回车直接创建
+  manualInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doManual();
+  });
+  prefixInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doBatch();
+  });
+
+  return h('div', { class: 'card' },
+    h('h3', { text: '我的邮箱地址（无限邮箱）' }),
+    h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:12px' },
+      data.unlimited
+        ? '当前无数量限制，可以创建任意多个地址，全部投递到你的主邮箱。'
+        : `当前上限 ${data.limit} 个，已用 ${data.total} 个。`),
+    listBox,
+    h('div', { style: 'border-top:1px solid var(--border);margin-top:14px;padding-top:14px' },
+      h('div', { style: 'font-size:13px;font-weight:600;margin-bottom:8px', text: '新建邮箱地址' }),
+      h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:8px', text: '只需填前缀，回车即创建' }),
+      h('div', { class: 'inline-form' },
+        h('div', { class: 'field', style: 'flex:2' }, h('label', { text: '前缀' }), manualInput),
+        h('div', { class: 'field', style: 'flex:1' }, h('label', { text: '域名' }), manualDomain),
+        h('button', { class: 'btn primary', onClick: doManual }, '创建'),
+      ),
+      h('div', { style: 'margin:-6px 0 14px 0' }, manualPreview),
+
+      h('div', { style: 'border-top:1px solid var(--border);padding-top:14px;margin-top:6px' },
+        h('div', { style: 'font-size:13px;font-weight:600;margin-bottom:8px', text: '批量生成' }),
+        h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:8px', text: '前缀留空则生成随机地址，填前缀则生成 前缀-1、前缀-2…' }),
+        h('div', { class: 'inline-form' },
+          h('div', { class: 'field', style: 'flex:2' }, h('label', { text: '前缀（可留空）' }), prefixInput),
+          h('div', { class: 'field', style: 'flex:1' }, h('label', { text: '域名' }), domainSelect),
+          h('div', { class: 'field', style: 'flex:0 0 90px' }, h('label', { text: '数量' }), countInput),
+          h('button', { class: 'btn', onClick: doBatch }, '生成'),
+        ),
+        h('div', { style: 'margin:-6px 0 0 0' }, preview),
+      ),
+    ),
+  );
 }
 
 // ---------- 设置 ----------
@@ -605,6 +972,8 @@ async function renderSettings(toolbar, content) {
           }, '保存'),
         ),
       ),
+
+      await renderAliasCard(),
 
       h('div', { class: 'card' },
         h('h3', { text: '邮件转发' }),

@@ -59,10 +59,16 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
   // ============ 文件夹与邮件 ============
   web.get('/api/folders', wrap(async (ctx) => {
     const u = web.requireUser(ctx);
-    const counts = store.folderCounts(u.id);
+    const mailbox = ctx.query.get('mailbox') || null;
+    // 校验 mailbox 属于当前用户（主邮箱或别名）
+    const mb = mailbox ? await resolveMailbox(db, account, u, mailbox) : null;
+    const counts = mailbox
+      ? countByMailbox(store, db, u.id, mailbox)
+      : store.folderCounts(u.id);
     return {
       folders: SYSTEM_FOLDERS.map((f) => ({ name: f, ...counts[f] })),
       total: Object.values(counts).reduce((a, b) => a + b.total, 0),
+      mailbox: mb,
     };
   }));
 
@@ -73,12 +79,15 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
     const offset = Number(ctx.query.get('offset')) || 0;
     const search = ctx.query.get('q') || '';
     const unreadOnly = ctx.query.get('unread') === '1';
-    const rows = store.listMessages(u.id, folder, { limit, offset, search, unreadOnly });
+    const mailbox = ctx.query.get('mailbox') || null;
+    if (mailbox) await resolveMailbox(db, account, u, mailbox);
+    const rows = store.listMessages(u.id, folder, { limit, offset, search, unreadOnly, mailbox });
     return {
       messages: rows.map((r) => ({
         id: r.id,
         uid: r.uid,
         folder: r.folder,
+        mailbox: r.mailbox,
         subject: r.subject || '(无主题)',
         from: r.from_addr,
         fromName: r.from_name,
@@ -91,7 +100,7 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
         flagged: r.flags.includes('\\Flagged'),
         spamScore: r.spam_score,
       })),
-      total: store.countFolder(u.id, folder).total,
+      total: mailbox ? store.countFolder(u.id, folder, mailbox).total : store.countFolder(u.id, folder).total,
     };
   }));
 
@@ -116,6 +125,7 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
       html: msg.body_html,
       messageId: msg.message_id,
       folder: msg.folder,
+      mailbox: msg.mailbox,
       flags: msg.flags.split(' ').filter(Boolean),
       spamScore: msg.spam_score,
       spamReason: msg.spam_reason,
@@ -193,9 +203,12 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
     }
 
     const senderAddr = normalizeEmail(from || u.email);
-    if (senderAddr !== u.email) {
+    if (senderAddr !== u.email.toLowerCase()) {
+      // 必须是自己拥有的别名
       const alias = db.get('SELECT * FROM aliases WHERE address = ? AND active = 1', senderAddr);
       if (!alias) throw new HttpError(403, '不能使用该发件人地址');
+      const targets = safeJson(alias.targets).map((t) => String(t).toLowerCase());
+      if (!targets.includes(u.email.toLowerCase())) throw new HttpError(403, '不能使用该发件人地址');
     }
 
     const atts = [];
@@ -230,7 +243,8 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
       try { outRaw = dkim.sign(raw, domain); } catch (e) { /* 签名失败不阻断 */ }
     }
 
-    store.appendSent({ userId: u.id, mailbox: u.email, raw: outRaw });
+    // 已发送记录记在实际使用的发件地址下
+    store.appendSent({ userId: u.id, mailbox: senderAddr, raw: outRaw });
 
     const allRcpt = [...toList, ...ccList, ...bccList].map((a) => a.address);
     let local = 0;
@@ -304,6 +318,137 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
     const u = web.requireUser(ctx);
     account.deleteApiKey(u.id, Number(ctx.params.id));
     return { ok: true };
+  }));
+
+  // ============ 无限邮箱：用户自助管理别名 ============
+  web.get('/api/aliases', wrap(async (ctx) => {
+    const u = web.requireUser(ctx);
+    const list = account.listAliases(u.id).map((a) => ({
+      id: a.id,
+      address: a.address,
+      targets: safeJson(a.targets),
+      active: !!a.active,
+      createdAt: a.created_at,
+    }));
+    const limit = Number(cfg.alias?.maxPerUser ?? 0);
+    return {
+      aliases: list,
+      total: list.length,
+      limit,
+      unlimited: limit === 0,
+      allowSelfCreate: !!cfg.alias?.allowSelfCreate,
+      domains: account.listDomains().filter((d) => d.active).map((d) => d.name),
+      maxBatch: Number(cfg.alias?.maxBatch ?? 500),
+    };
+  }));
+
+  web.post('/api/aliases', wrap(async (ctx) => {
+    const u = web.requireUser(ctx);
+    if (!cfg.alias?.allowSelfCreate) throw new HttpError(403, '管理员已关闭自助创建别名');
+    const { address, prefix, local, domain, targets } = ctx.body || {};
+    const list = targets && String(targets).trim() ? targets : u.email;
+
+    // 支持三种写法：
+    //   1) address 完整地址：shop@example.com
+    //   2) prefix + domain：shop + example.com
+    //   3) 只给 prefix：自动用默认域名
+    let full = '';
+    if (address && String(address).includes('@')) {
+      full = String(address).trim();
+    } else {
+      const name = String(prefix ?? local ?? address ?? '').trim().replace(/^@+/, '');
+      if (!name) throw new HttpError(400, '请填写邮箱前缀');
+      if (!/^[a-z0-9._+-]+$/i.test(name)) throw new HttpError(400, '前缀只能包含字母、数字、点、下划线、加号和减号');
+      let dom = String(domain || '').trim().toLowerCase();
+      if (!dom) {
+        const first = account.listDomains().find((d) => d.active);
+        if (!first) throw new HttpError(400, '还没有可用域名，请先在后台添加');
+        dom = first.name;
+      }
+      full = `${name}@${dom}`;
+    }
+
+    const a = account.createAlias(full, list, { ownerId: u.id });
+    return { ok: true, alias: { id: a.id, address: a.address, targets: safeJson(a.targets), active: true } };
+  }));
+
+  // 批量生成随机地址（无限邮箱核心功能）
+  web.post('/api/aliases/batch', wrap(async (ctx) => {
+    const u = web.requireUser(ctx);
+    if (!cfg.alias?.allowSelfCreate) throw new HttpError(403, '管理员已关闭自助创建别名');
+    const { count = 1, prefix = '', domain, targets } = ctx.body || {};
+    const maxBatch = Number(cfg.alias?.maxBatch ?? 500);
+    const n = Number(count) || 1;
+    if (n < 1 || n > maxBatch) throw new HttpError(400, `单次创建数量需在 1-${maxBatch} 之间`);
+
+    const dom = String(domain || '').toLowerCase();
+    const d = db.get('SELECT * FROM domains WHERE name = ? AND active = 1', dom);
+    if (!d) throw new HttpError(400, '请选择有效的域名');
+
+    const limit = Number(cfg.alias?.maxPerUser ?? 0);
+    if (limit > 0) {
+      const owned = account.listAliases(u.id).length;
+      if (owned + n > limit) throw new HttpError(400, `最多可创建 ${limit} 个别名，当前已有 ${owned} 个`);
+    }
+
+    const result = account.createAliasBatch({
+      count: n,
+      prefix: String(prefix || '').trim(),
+      domain: dom,
+      targets: targets && String(targets).trim() ? targets : u.email,
+      ownerId: u.id,
+    });
+    return {
+      ok: true,
+      created: result.created.map((a) => a.address),
+      errors: result.errors,
+      count: result.created.length,
+    };
+  }));
+
+  web.delete('/api/aliases/:id', wrap(async (ctx) => {
+    const u = web.requireUser(ctx);
+    const row = db.get('SELECT * FROM aliases WHERE id = ?', Number(ctx.params.id));
+    if (!row) throw new HttpError(404, '别名不存在');
+    // 只能删自己创建的（管理员不限）
+    if (!u.is_admin && row.owner_id !== u.id) throw new HttpError(403, '无权删除该别名');
+    account.deleteAlias(row.id);
+    return { ok: true };
+  }));
+
+  web.put('/api/aliases/:id', wrap(async (ctx) => {
+    const u = web.requireUser(ctx);
+    const row = db.get('SELECT * FROM aliases WHERE id = ?', Number(ctx.params.id));
+    if (!row) throw new HttpError(404, '别名不存在');
+    if (!u.is_admin && row.owner_id !== u.id) throw new HttpError(403, '无权修改该别名');
+    const { targets, active } = ctx.body || {};
+    const a = account.updateAlias(row.id, { targets, active });
+    return { ok: true, alias: { id: a.id, address: a.address, targets: safeJson(a.targets), active: !!a.active } };
+  }));
+
+  // 可用域名列表（建别名时选择）
+  web.get('/api/domains/available', wrap(async (ctx) => {
+    web.requireUser(ctx);
+    return { domains: account.listDomains().filter((d) => d.active).map((d) => d.name) };
+  }));
+
+  // ============ 切换邮箱：可切换的身份列表 ============
+  web.get('/api/mailboxes', wrap(async (ctx) => {
+    const u = web.requireUser(ctx);
+    const list = [{ address: u.email, type: 'primary', label: u.display_name || '主邮箱' }];
+
+    for (const a of account.listAliases(u.id)) {
+      if (!a.active) continue;
+      list.push({ address: a.address, type: 'alias', label: a.address.split('@')[0] });
+    }
+
+    // 每个身份未读数
+    for (const m of list) {
+      m.unread = store.countFolder(u.id, 'INBOX', m.address).unread;
+      m.total = store.countFolder(u.id, 'INBOX', m.address).total;
+    }
+
+    return { mailboxes: list, current: ctx.query.get('current') || u.email };
   }));
 
   // ============ 管理后台 ============
@@ -492,6 +637,41 @@ function publicUser(u) {
     quotaMb: u.quota_mb,
     createdAt: u.created_at,
   };
+}
+
+function safeJson(s, fallback = []) {
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// 校验 mailbox 地址归属当前用户（主邮箱或其别名）
+async function resolveMailbox(db, account, user, mailbox) {
+  const addr = String(mailbox).toLowerCase().trim();
+  if (addr === user.email.toLowerCase()) return addr;
+  const alias = db.get('SELECT * FROM aliases WHERE address = ? AND active = 1', addr);
+  if (alias) {
+    const targets = safeJson(alias.targets).map((t) => String(t).toLowerCase());
+    if (targets.includes(user.email.toLowerCase())) return addr;
+  }
+  throw new HttpError(403, '无权访问该邮箱');
+}
+
+// 按 mailbox 统计各文件夹数量
+function countByMailbox(store, db, userId, mailbox) {
+  const rows = db.all(
+    `SELECT folder, COUNT(*) AS c,
+            SUM(CASE WHEN instr(flags, '\\Seen') = 0 THEN 1 ELSE 0 END) AS u
+     FROM messages WHERE user_id = ? AND mailbox = ? GROUP BY folder`,
+    userId, mailbox
+  );
+  const out = {};
+  for (const f of SYSTEM_FOLDERS) out[f] = { total: 0, unread: 0 };
+  for (const r of rows) out[r.folder] = { total: Number(r.c), unread: Number(r.u || 0) };
+  return out;
 }
 
 function dnsGuide(domain) {

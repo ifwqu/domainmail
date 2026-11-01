@@ -269,7 +269,97 @@ ok('admin create user', nu.json?.ok === true, JSON.stringify(nu.json));
 const dnsr = await http('GET', `/api/admin/domains/${ad.json.domain.id}/dns`, null, ac);
 ok('dns endpoint', dnsr.json?.dkim?.name?.includes('_domainkey'), JSON.stringify(dnsr.json?.dkim));
 
-console.log('\n=== 12. antispam ===');
+console.log('\n=== 12. unlimited mailboxes (aliases) ===');
+const aliasList0 = await http('GET', '/api/aliases', null, cookie);
+ok('aliases endpoint', aliasList0.status === 200, JSON.stringify(aliasList0.json));
+ok('unlimited by default', aliasList0.json?.unlimited === true, JSON.stringify(aliasList0.json));
+ok('self create allowed', aliasList0.json?.allowSelfCreate === true);
+ok('domains listed', aliasList0.json?.domains?.includes('test.local'), JSON.stringify(aliasList0.json?.domains));
+
+// 批量生成 20 个随机地址
+const batch = await http('POST', '/api/aliases/batch', { count: 20, domain: 'test.local' }, cookie);
+ok('batch create 20', batch.json?.count === 20, JSON.stringify(batch.json)?.slice(0, 200));
+ok('batch addresses valid', batch.json?.created?.every((a) => /^[a-z0-9]+@test\.local$/.test(a)), JSON.stringify(batch.json?.created?.slice(0, 3)));
+
+// 带前缀
+const batch2 = await http('POST', '/api/aliases/batch', { count: 3, prefix: 'shop', domain: 'test.local' }, cookie);
+ok('batch with prefix', batch2.json?.created?.includes('shop-1@test.local'), JSON.stringify(batch2.json?.created));
+
+// 手动创建
+const manual = await http('POST', '/api/aliases', { address: 'contact@test.local' }, cookie);
+ok('manual alias create', manual.json?.ok === true, JSON.stringify(manual.json));
+ok('manual alias targets owner', manual.json?.alias?.targets?.includes('alice@test.local'), JSON.stringify(manual.json?.alias?.targets));
+
+// 重复拒绝
+const dup = await http('POST', '/api/aliases', { address: 'contact@test.local' }, cookie);
+ok('duplicate alias rejected', dup.status === 400, String(dup.status));
+
+// 无效域名拒绝
+const badDom = await http('POST', '/api/aliases', { address: 'x@notexist.test' }, cookie);
+ok('unknown domain rejected', badDom.status === 400, String(badDom.status));
+
+// 只填前缀即可创建（无需输入完整地址）
+const prefixOnly = await http('POST', '/api/aliases', { prefix: 'hello', domain: 'test.local' }, cookie);
+ok('prefix-only create', prefixOnly.json?.alias?.address === 'hello@test.local', JSON.stringify(prefixOnly.json));
+
+// 只给 prefix、不给 domain，自动用默认域名（第一个启用的域名）
+const autoDom = await http('POST', '/api/aliases', { prefix: 'auto' }, cookie);
+ok('prefix without domain', /^auto@.+/.test(autoDom.json?.alias?.address || ''), JSON.stringify(autoDom.json));
+
+// 非法前缀拒绝
+const badPrefix = await http('POST', '/api/aliases', { prefix: 'bad prefix!' }, cookie);
+ok('invalid prefix rejected', badPrefix.status === 400, String(badPrefix.status));
+
+// 空前缀拒绝
+const emptyPrefix = await http('POST', '/api/aliases', {}, cookie);
+ok('empty prefix rejected', emptyPrefix.status === 400, String(emptyPrefix.status));
+
+// 完整地址写法仍然支持
+const fullAddr = await http('POST', '/api/aliases', { address: 'legacy@test.local' }, cookie);
+ok('full address still works', fullAddr.json?.alias?.address === 'legacy@test.local', JSON.stringify(fullAddr.json));
+
+// 向别名投递
+const c4 = await smtpClient({ port: cfg.smtp.port });
+await c4.readResponse();
+await c4.cmd('EHLO t.local');
+await c4.cmd('MAIL FROM:<news@external.test>');
+const aliasRcpt2 = await c4.cmd('RCPT TO:<contact@test.local>');
+ok('alias accepts mail', aliasRcpt2[0].startsWith('250'), aliasRcpt2[0]);
+await c4.cmd('DATA');
+c4.write('From: news@external.test\r\nTo: contact@test.local\r\nSubject: unlimited alias test\r\n\r\nbody\r\n.\r\n');
+ok('alias delivery ok', (await c4.readResponse())[0].startsWith('250'));
+await c4.cmd('QUIT');
+c4.close();
+await new Promise((r) => setTimeout(r, 300));
+const aliceInbox = app.store.listMessages(u1.id, 'INBOX');
+ok('alias mail lands in main inbox', aliceInbox.some((m) => m.subject === 'unlimited alias test'), String(aliceInbox.length));
+
+// 列表包含全部
+const aliasList1 = await http('GET', '/api/aliases', null, cookie);
+ok('aliases total 28', aliasList1.json?.total === 28, String(aliasList1.json?.total));
+
+// 停用 / 删除
+const firstAlias = aliasList1.json.aliases[0];
+const toggle = await http('PUT', `/api/aliases/${firstAlias.id}`, { active: false }, cookie);
+ok('alias disable', toggle.json?.alias?.active === false, JSON.stringify(toggle.json));
+
+const delAlias = await http('DELETE', `/api/aliases/${firstAlias.id}`, null, cookie);
+ok('alias delete', delAlias.json?.ok === true);
+const aliasList2 = await http('GET', '/api/aliases', null, cookie);
+ok('aliases total 27 after delete', aliasList2.json?.total === 27, String(aliasList2.json?.total));
+
+// 用户不能删别人的别名
+const bobCookie = (await http('POST', '/api/auth/login', { email: 'bob@test.local', password: 'bob123' })).cookie;
+const bobAliases = await http('GET', '/api/aliases', null, bobCookie);
+ok('bob sees only shared alias', bobAliases.json?.total === 1, String(bobAliases.json?.total));
+const bobDel = await http('DELETE', `/api/aliases/${aliasList2.json.aliases[0].id}`, null, bobCookie);
+ok('bob cannot delete alice alias', bobDel.status === 403, String(bobDel.status));
+
+// 批量上限
+const tooMany = await http('POST', '/api/aliases/batch', { count: 9999, domain: 'test.local' }, cookie);
+ok('batch over limit rejected', tooMany.status === 400, String(tooMany.status));
+
+console.log('\n=== 13. antispam ===');
 const { scoreSpam } = await import('../src/policy.js');
 const sp = await scoreSpam({
   cfg: app.cfg,
@@ -278,7 +368,7 @@ const sp = await scoreSpam({
 });
 ok('spam score above threshold', sp.score >= app.cfg.antispam.spamThreshold, JSON.stringify(sp));
 
-console.log('\n=== 13. restart persistence ===');
+console.log('\n=== 14. restart persistence ===');
 const before = app.db.get('SELECT COUNT(*) AS c FROM messages').c;
 await app.stop();
 const app2 = await createApp(CONFIG);

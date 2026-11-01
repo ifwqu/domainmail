@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS aliases (
   address    TEXT NOT NULL UNIQUE COLLATE NOCASE,
   targets    TEXT NOT NULL,
   active     INTEGER NOT NULL DEFAULT 1,
+  owner_id   INTEGER,
   created_at INTEGER NOT NULL
 );
 
@@ -147,7 +148,21 @@ export class DB {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
     this.db.exec(SCHEMA);
+    this.migrate();
     this.stmts = new Map();
+  }
+
+  // 增量迁移：为老数据库补字段
+  migrate() {
+    const ensureColumn = (table, col, def) => {
+      const cols = this.db.prepare(`PRAGMA table_info(${table})`).all();
+      if (!cols.some((c) => c.name === col)) {
+        try {
+          this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+        } catch {}
+      }
+    };
+    ensureColumn('aliases', 'owner_id', 'INTEGER');
   }
 
   prepare(sql) {
