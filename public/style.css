@@ -46,6 +46,8 @@ html, body {
   background: var(--bg-app); color: var(--text);
   font-family: "Google Sans", Roboto, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button, input, textarea, select { font: inherit; color: inherit; }
@@ -57,14 +59,28 @@ code { font-family: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace; fon
 /* ---------- 登录（Google 账号风格） ---------- */
 .auth-wrap {
   display: grid; place-items: center; min-height: 100vh; padding: 24px;
+  background: linear-gradient(160deg, #eef3fc 0%, var(--bg-app) 45%, #fdf1f0 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .auth-wrap { background: radial-gradient(1000px 500px at 50% 0%, #1f2937 0%, var(--bg-app) 60%); }
 }
 .auth-card {
   width: 100%; max-width: 448px; background: var(--panel);
   border: 1px solid var(--border); border-radius: 28px;
-  padding: 48px 40px 36px; box-shadow: var(--shadow-1);
+  padding: 48px 40px 36px; box-shadow: var(--shadow-2);
+}
+.auth-logo {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-bottom: 20px; font-size: 21px; font-weight: 500; letter-spacing: -.3px;
+}
+.auth-logo .logo-mark {
+  width: 38px; height: 38px; border-radius: 11px;
+  background: linear-gradient(135deg, #ea4335 0%, #fbbc04 50%, #34a853 100%);
+  display: grid; place-items: center; color: #fff; font-size: 18px;
+  box-shadow: 0 2px 10px rgba(234, 67, 53, .28);
 }
 .auth-card h1 {
-  margin: 0 0 8px; font-size: 24px; font-weight: 500;
+  margin: 0 0 8px; font-size: 26px; font-weight: 500;
   letter-spacing: 0; text-align: center;
 }
 .auth-card .sub { color: var(--muted); margin-bottom: 28px; font-size: 14px; text-align: center; }
@@ -126,42 +142,53 @@ code { font-family: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace; fon
   display: flex; flex-direction: column; overflow: hidden;
 }
 .brand {
-  padding: 18px 12px 12px 26px; font-weight: 500; font-size: 20px;
+  padding: 16px 12px 10px 24px; font-weight: 500; font-size: 19px;
   display: flex; align-items: center; gap: 10px; color: var(--muted);
   letter-spacing: -.2px; flex: 0 0 auto;
 }
-.brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--g-red); flex: 0 0 auto; }
+.brand .dot {
+  width: 32px; height: 32px; border-radius: 10px; flex: 0 0 auto;
+  background: linear-gradient(135deg, #ea4335 0%, #fbbc04 50%, #34a853 100%);
+  display: grid; place-items: center; color: #fff; font-size: 16px;
+  box-shadow: 0 1px 6px rgba(234, 67, 53, .25);
+}
 .brand span:last-child { color: var(--text); }
+.brand b { font-weight: 700; }
 
 .compose-btn {
-  margin: 4px 12px 14px 8px; height: 56px; border-radius: 16px;
+  margin: 2px 12px 14px 8px; height: 56px; border-radius: 16px;
   background: #c2e7ff; border: 0; color: #001d35;
   font-size: 14px; font-weight: 500; letter-spacing: .2px;
-  display: flex; align-items: center; gap: 12px; padding: 0 20px;
-  cursor: pointer; box-shadow: none; flex: 0 0 auto;
-  transition: box-shadow .15s, background .15s;
+  display: flex; align-items: center; gap: 12px; padding: 0 18px;
+  cursor: pointer; box-shadow: var(--shadow-1);
+  transition: box-shadow .15s, background .15s, transform .08s;
 }
-.compose-btn:hover { box-shadow: var(--shadow-1); background: #b3dcff; }
+.compose-btn:hover { box-shadow: var(--shadow-2); background: #b3dcff; }
+.compose-btn:active { transform: scale(.985); }
 .compose-btn .ico {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 50%;
-  background: #041e49; color: #c2e7ff; font-size: 16px; font-weight: 400;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #041e49; color: #c2e7ff; font-size: 17px; font-weight: 400;
+  transition: transform .2s;
 }
+.compose-btn:hover .ico { transform: rotate(90deg); }
 @media (prefers-color-scheme: dark) {
-  .compose-btn { background: #0b57d0; color: #c2e7ff; }
+  .compose-btn { background: #0b57d0; color: #c2e7ff; box-shadow: none; }
   .compose-btn .ico { background: #c2e7ff; color: #041e49; }
   .compose-btn:hover { background: #0a5ccd; }
 }
 
 .folder-list { flex: 1; overflow-y: auto; padding: 0 0 8px; }
 .folder {
-  display: flex; align-items: center; gap: 14px; padding: 0 12px 0 26px;
+  display: flex; align-items: center; gap: 14px; padding: 0 12px 0 24px;
   height: 34px; border-radius: 0 100px 100px 0; cursor: pointer;
   color: var(--text); font-size: 14px; transition: background .12s;
   margin-right: 12px;
 }
 .folder:hover { background: var(--hover); }
-.folder.on { background: var(--g-blue-soft); color: #001d35; font-weight: 600; }
+.folder.on {
+  background: var(--g-blue-soft); color: #001d35; font-weight: 600;
+}
 .folder .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder .ico { font-size: 16px; width: 20px; text-align: center; flex: 0 0 auto; }
 .folder .badge {
@@ -277,13 +304,19 @@ code { font-family: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace; fon
 
 .toolbar {
   height: 64px; flex: 0 0 64px; display: flex; align-items: center; gap: 10px;
-  padding: 0 16px; flex-wrap: nowrap;
+  padding: 0 20px; flex-wrap: nowrap;
 }
 .toolbar h2 {
   margin: 0 8px 0 0; font-size: 20px; font-weight: 400; flex: 0 0 auto;
   color: var(--text);
 }
 .toolbar .spacer { flex: 1; }
+.toolbar .btn.sm {
+  border: 0; background: transparent; color: var(--muted);
+  border-radius: 100px; height: 36px; padding: 0 16px;
+}
+.toolbar .btn.sm:hover { background: var(--hover); color: var(--text); box-shadow: none; }
+.toolbar .btn.sm.danger { color: var(--g-red); }
 .search-box {
   display: flex; align-items: center; gap: 12px;
   background: var(--bg-app); border: 1px solid transparent;
@@ -291,9 +324,9 @@ code { font-family: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace; fon
   max-width: 560px; width: 100%; transition: background .15s, box-shadow .15s, border-color .15s;
 }
 .search-box:focus-within {
-  background: var(--panel); box-shadow: var(--shadow-1); border-color: transparent;
+  background: var(--panel); box-shadow: var(--shadow-2); border-color: transparent;
 }
-.search-box .ico { color: var(--muted); font-size: 16px; }
+.search-box .ico { color: var(--muted); font-size: 17px; }
 .search-box input {
   border: 0; background: transparent; outline: none; width: 100%; font-size: 15px;
 }
@@ -303,31 +336,37 @@ code { font-family: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace; fon
 /* ---------- 邮件列表（Gmail 单行式） ---------- */
 .list-pane {
   width: 100%; flex: 1; overflow-y: auto; background: var(--panel);
+  padding: 6px 8px;
 }
 .list-pane.with-read { max-width: 460px; border-right: 1px solid var(--border-light); }
 
 .mail-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 20px 0 16px; height: 44px; cursor: pointer;
-  border-bottom: 1px solid var(--border-light);
-  transition: box-shadow .1s;
-  font-size: 14px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 18px 0 12px; height: 42px; cursor: pointer;
+  border-radius: 10px; transition: background .1s, box-shadow .1s;
+  font-size: 14px; position: relative;
 }
-.mail-item:hover {
-  box-shadow: inset 1px 0 0 var(--parent, transparent), var(--shadow-1);
-  z-index: 1; position: relative; border-bottom-color: transparent;
-  border-radius: 8px;
+.mail-item + .mail-item { margin-top: 1px; }
+.mail-item:hover { background: var(--hover); }
+.mail-item.on {
+  background: var(--g-blue-soft);
+  box-shadow: inset 3px 0 0 var(--g-blue);
 }
-.mail-item.on { background: var(--g-blue-soft); border-radius: 8px; }
 .mi-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: transparent; }
 .mail-item.unread .mi-dot { background: var(--g-blue); }
-.mi-from {
-  width: 168px; flex: 0 0 168px; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; color: var(--muted); font-size: 13.5px;
+.mi-avatar {
+  width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 14px; font-weight: 500;
+  color: #001d35;
 }
-.mail-item.unread .mi-from { color: var(--text); font-weight: 700; }
+.mi-from {
+  width: 140px; flex: 0 0 140px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--text); font-size: 13.5px;
+}
+.mail-item:not(.unread) .mi-from { color: var(--muted); font-weight: 400; }
+.mail-item.unread .mi-from { font-weight: 700; }
 .mi-sub {
-  flex: 0 1 auto; max-width: 34%; overflow: hidden; text-overflow: ellipsis;
+  flex: 0 1 auto; max-width: 32%; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; font-size: 13.5px;
 }
 .mail-item.unread .mi-sub { font-weight: 700; }
@@ -337,8 +376,8 @@ code { font-family: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace; fon
 }
 .mi-time { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
 .mail-item.unread .mi-time { font-weight: 700; color: var(--text); }
-.mi-star { color: var(--g-yellow); font-size: 14px; flex: 0 0 auto; }
-.mi-att { color: var(--muted); font-size: 12px; flex: 0 0 auto; }
+.mi-star { color: #f9ab00; font-size: 15px; flex: 0 0 auto; }
+.mi-att { color: var(--muted); font-size: 13px; flex: 0 0 auto; }
 .mi-tag-warn {
   font-size: 10px; color: var(--g-red); border: 1px solid var(--g-red);
   border-radius: 4px; padding: 0 4px; flex: 0 0 auto;
@@ -382,7 +421,12 @@ code { font-family: "Roboto Mono", ui-monospace, Menlo, Consolas, monospace; fon
 .att-item:hover { box-shadow: var(--shadow-1); background: var(--hover); }
 .att-item .sz { color: var(--muted); font-size: 11px; }
 
-.empty { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 14px; }
+.empty {
+  display: grid; place-items: center; height: 100%;
+  color: var(--muted); font-size: 14px;
+  background: radial-gradient(circle at 50% 42%, var(--bg-app) 0%, transparent 70%);
+}
+.empty .empty-ico { font-size: 44px; margin-bottom: 12px; opacity: .45; }
 .loading-row { padding: 32px; text-align: center; color: var(--muted); font-size: 13px; }
 
 /* ---------- 写信（Gmail 撰写窗口） ---------- */

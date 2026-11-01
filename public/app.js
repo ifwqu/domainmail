@@ -93,6 +93,18 @@ const FOLDER_LABEL = {
 };
 const FOLDER_ICON = { INBOX: '📥', Sent: '📤', Drafts: '📝', Trash: '🗑', Junk: '⚠️' };
 
+// 首字头像配色（按地址哈希稳定取色）
+const AVATAR_COLORS = ['#d3e3fd', '#d7f1d5', '#fde293', '#f8d0ce', '#d8c8f5', '#c8e8f5', '#fde2c8'];
+function avatarColor(seed) {
+  let hash = 0;
+  for (const ch of String(seed || '')) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+function avatarInitial(name, addr) {
+  const src = (name || addr || '?').trim();
+  return src.charAt(0).toUpperCase();
+}
+
 // 列表行里显示的对方名字
 function counterpartName(m) {
   const f = state.folder;
@@ -145,8 +157,9 @@ function renderAuth(mode = 'login') {
   passInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 
   const card = h('div', { class: 'auth-card' },
-    h('h1', { text: '域名邮箱' }),
-    h('div', { class: 'sub', text: '自建邮件系统 · 支持 IMAP / SMTP 客户端' }),
+    h('div', { class: 'auth-logo' }, h('span', { class: 'logo-mark', text: '✉' }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
+    h('h1', { text: mode === 'login' ? '欢迎回来' : '创建账号' }),
+    h('div', { class: 'sub', text: mode === 'login' ? '登录你的自建邮箱' : '注册新的邮箱地址' }),
     h('div', { class: 'auth-tabs' },
       h('button', { class: mode === 'login' ? 'on' : '', onClick: () => renderAuth('login') }, '登录'),
       h('button', { class: mode === 'register' ? 'on' : '', onClick: () => renderAuth('register') }, '注册'),
@@ -172,7 +185,7 @@ function renderShell() {
   const foot = h('div', { class: 'sidebar-foot' });
 
   const sidebar = h('aside', { class: 'sidebar' },
-    h('div', { class: 'brand' }, h('span', { class: 'dot' }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
+    h('div', { class: 'brand' }, h('span', { class: 'dot', text: '✉' }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
     h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
     h('button', { class: 'compose-btn', onClick: () => openCompose() },
       h('span', { class: 'ico', text: '✎' }), h('span', { class: 'txt', text: '写邮件' })),
@@ -499,27 +512,37 @@ function renderList() {
   const list = state.refs.list;
   if (!list) return;
   if (!state.messages.length) {
-    list.replaceChildren(h('div', { class: 'empty', text: state.search ? '没有匹配的邮件' : '这个文件夹是空的' }));
+    list.replaceChildren(
+      h('div', { class: 'empty' },
+        h('div', { style: 'text-align:center' },
+          h('div', { class: 'empty-ico', text: state.search ? '🔍' : '📭' }),
+          h('div', { text: state.search ? '没有匹配的邮件' : '这个文件夹是空的' }),
+        ),
+      ),
+    );
     return;
   }
   list.replaceChildren(
-    ...state.messages.map((m) =>
-      h('div', {
+    ...state.messages.map((m) => {
+      const who = counterpartName(m);
+      const addr = counterpartAddr(m);
+      return h('div', {
         class: `mail-item ${m.seen ? '' : 'unread'} ${state.selected?.id === m.id ? 'on' : ''}`,
         onClick: () => openMessage(m.id),
       },
         h('span', { class: 'mi-dot' }),
+        h('span', { class: 'mi-avatar', style: `background:${avatarColor(addr || who)}`, text: avatarInitial(who, addr) }),
         state.folder === 'Sent' || state.folder === 'Drafts'
-          ? h('span', { class: 'mi-from', text: `收件人: ${counterpartName(m)}` })
-          : h('span', { class: 'mi-from', text: counterpartName(m) }),
+          ? h('span', { class: 'mi-from', title: who, text: `致 ${who}` })
+          : h('span', { class: 'mi-from', title: addr, text: who }),
         h('span', { class: 'mi-sub', text: m.subject || '(无主题)' }),
         h('span', { class: 'mi-snip', text: ` — ${m.snippet || ''}` }),
         m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', text: '📎' }) : null,
         m.flagged ? h('span', { class: 'mi-star', text: '★' }) : null,
         m.spamScore >= 5 ? h('span', { class: 'mi-tag-warn', text: '垃圾' }) : null,
         h('span', { class: 'mi-time', text: fmtTime(m.date) }),
-      )
-    )
+      );
+    })
   );
 }
 
@@ -585,18 +608,12 @@ function renderReader(m) {
   );
 
   const initial = (m.fromName || m.from || '?').trim().charAt(0).toUpperCase();
-  const avatarColor = (() => {
-    const colors = ['#d3e3fd', '#d7f1d5', '#fde293', '#f8d0ce', '#d8c8f5', '#c8e8f5'];
-    let hash = 0;
-    for (const ch of (m.from || '')) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-    return colors[hash % colors.length];
-  })();
 
   read.append(
     h('div', { class: 'read-head' },
       h('div', { class: 'read-subject', text: m.subject || '(无主题)' }),
       h('div', { class: 'read-meta' },
-        h('div', { class: 'avatar', style: `background:${avatarColor}`, text: initial }),
+        h('div', { class: 'avatar', style: `background:${avatarColor(m.from)}`, text: initial }),
         h('div', { class: 'who' },
           h('div', {}, h('b', { text: m.fromName || m.from }), m.fromName ? ` <${m.from}>` : ''),
           h('div', { class: 'to', text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
