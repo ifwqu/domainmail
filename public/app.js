@@ -170,6 +170,10 @@ const ICONS = {
   layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  chevronLeft: '<path d="m15 18-6-6 6-6"/>',
+  minus: '<path d="M5 12h14"/>',
+  maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
 };
 
 // 生成内联 SVG 图标
@@ -330,20 +334,27 @@ function renderShell() {
   const topbar = h('header', { class: 'topbar' },
     h('div', { class: 'topbar-brand' },
       h('span', { class: 'logo', html: MAIL_SVG }),
-      h('span', {}, '域名', h('b', { text: '邮箱' })),
+      h('span', { text: '域名邮箱' }),
     ),
     h('div', { class: 'topbar-search' },
-      h('span', { class: 'ico', html: icon('search', 15) }), topSearch,
+      h('span', { class: 'ico', html: icon('search', 16) }), topSearch,
     ),
     h('div', { class: 'topbar-right' },
-      h('span', { class: 'topbar-user', text: state.mailbox || state.user?.email || '' }),
+      h('span', { class: 'topbar-avatar', text: (state.user?.email || '?').slice(0, 1).toUpperCase() }),
+      h('span', { class: 'topbar-user', text: (state.user?.email || '').split('@')[0] }),
+      h('button', { class: 'topbar-lang', type: 'button' },
+        h('span', { class: 'foot-ico', html: icon('globe', 14) }),
+        h('span', { text: '简体中文' }),
+      ),
     ),
   );
 
   const sidebar = h('aside', { class: 'sidebar' },
-    h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
-    h('button', { class: 'compose-btn', onClick: () => openCompose() },
-      h('span', { class: 'ico', html: icon('pen', 15) }), h('span', { class: 'txt', text: '写邮件' })),
+    h('div', { class: 'side-head' },
+      h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
+      h('button', { class: 'compose-btn', onClick: () => openCompose() },
+        h('span', { class: 'ico', html: icon('pen', 15) }), h('span', { class: 'txt', text: '写邮件' })),
+    ),
     folderList,
     aliasPanel,
     foot,
@@ -382,13 +393,12 @@ async function renderMailboxSwitcher() {
   const cur = state.mailboxes.find((m) => m.address === current) || state.mailboxes[0];
   const isPrimary = cur?.type === 'primary';
 
-  const label = h('div', { class: 'mb-current' },
+  const label = h('div', { class: 'mb-current', title: cur?.address || '' },
     h('div', { class: 'mb-label' },
-      h('span', { class: 'mb-badge', text: isPrimary ? '主' : '别名' }),
       h('span', { class: 'mb-addr', text: cur?.address || '' }),
     ),
     copyBtn(() => cur?.address, { title: '复制邮箱地址', cls: 'mb-copy', size: 12 }),
-    h('span', { class: 'mb-arrow', text: '▾' }),
+    h('span', { class: 'mb-arrow', html: icon('chevronDown', 14) }),
   );
 
   const menu = h('div', { class: 'mb-menu' });
@@ -404,6 +414,7 @@ async function renderMailboxSwitcher() {
           h('span', { class: 'mb-badge', text: m.type === 'primary' ? '主' : '别名' }),
           h('span', { class: 'mb-addr', text: m.address }),
           m.unread > 0 ? h('span', { class: 'mb-unread', text: String(m.unread) }) : null,
+          copyBtn(() => m.address, { title: '复制', cls: 'mb-item-copy', size: 12 }),
         )
       ),
       state.mailboxes.length > 1
@@ -466,7 +477,6 @@ async function renderAliasPanel() {
     class: 'alias-head',
     onClick: () => { state.aliasOpen = !open; renderAliasPanel(); },
   },
-    h('span', { class: 'alias-ico', html: icon('mailbox', 14) }),
     h('span', { class: 'alias-title', text: '我的邮箱' }),
     h('span', { class: 'alias-count', text: String(data.total) }),
     h('span', { class: 'alias-caret', html: icon(open ? 'chevronDown' : 'chevronRight', 13) }),
@@ -548,42 +558,76 @@ async function renderFolders() {
   } catch {
     state.folders = [];
   }
+
+  const head = h('div', { class: 'folder-group-head' },
+    h('span', { text: '邮件夹' }),
+    h('span', { class: 'acts' },
+      h('button', { class: 'act', type: 'button', title: '新建文件夹', html: icon('plus', 12) }),
+    ),
+  );
+
   folderList.replaceChildren(
-    ...state.folders.map((f) =>
-      h('div', {
-        class: `folder ${state.view === 'mail' && state.folder === f.name ? 'on' : ''}`,
-        onClick: () => { state.view = 'mail'; state.folder = f.name; state.selected = null; renderView(); renderFolders(); },
-      },
-        h('span', { class: 'ico', html: icon(FOLDER_ICON[f.name] || 'folder', 16) }),
-        h('span', { class: 'name', text: FOLDER_LABEL[f.name] || f.name }),
-        f.unread > 0
-          ? h('span', { class: 'badge', text: String(f.unread) })
-          : f.total > 0 ? h('span', { class: 'cnt', text: String(f.total) }) : null,
-      )
-    )
+    h('div', { class: 'folder-group' },
+      head,
+      ...state.folders.map((f) =>
+        h('div', {
+          class: `folder ${state.view === 'mail' && state.folder === f.name ? 'on' : ''}`,
+          onClick: () => { state.view = 'mail'; state.folder = f.name; state.selected = null; renderView(); renderFolders(); },
+        },
+          h('span', { class: 'ico', html: icon(FOLDER_ICON[f.name] || 'folder', 16) }),
+          h('span', { class: 'name', text: FOLDER_LABEL[f.name] || f.name }),
+          f.unread > 0
+            ? h('span', { class: 'badge', text: String(f.unread) })
+            : f.total > 0 ? h('span', { class: 'cnt', text: String(f.total) }) : null,
+        )
+      ),
+    ),
   );
 }
 
 function renderFoot() {
   const { foot } = state.refs;
+  const email = state.user?.email || '';
+  const initial = (email.split('@')[0] || '?').slice(0, 1).toUpperCase();
+  const total = state.folders.reduce((n, f) => n + (f.total || 0), 0);
+
   foot.replaceChildren(
-    h('div', { class: 'me', text: state.user?.email || '' }),
-    h('div', { class: 'row' },
-      h('button', {
-        class: 'btn sm', onClick: () => { state.view = 'settings'; state.selected = null; renderView(); renderFolders(); },
-      }, '设置'),
-      state.user?.isAdmin
-        ? h('button', {
-            class: 'btn sm', onClick: () => { state.view = 'admin'; state.selected = null; renderView(); renderFolders(); },
-          }, '管理')
-        : null,
-      h('button', {
-        class: 'btn sm', onClick: async () => {
-          await api('/api/auth/logout', { method: 'POST' });
-          state.user = null;
-          renderAuth('login');
+    h('div', { class: 'foot-row' },
+      h('span', { text: '邮箱容量' }),
+      h('span', { class: 'val', text: `${total} 封` }),
+    ),
+    h('div', { class: 'foot-bar' }, h('i', { style: 'width:12%' })),
+    h('div', { class: 'me-card' },
+      h('span', { class: 'me-avatar', text: initial }),
+      h('span', { class: 'me-mail', text: email }),
+      copyBtn(() => email, { title: '复制登录邮箱', cls: 'me-copy', size: 12 }),
+    ),
+    h('button', {
+      class: 'foot-btn', type: 'button',
+      onClick: () => { state.view = 'settings'; state.selected = null; renderView(); renderFolders(); },
+    },
+      h('span', { class: 'foot-ico', html: icon('settings', 14) }),
+      h('span', { text: '设置' }),
+    ),
+    state.user?.isAdmin
+      ? h('button', {
+          class: 'foot-btn', type: 'button',
+          onClick: () => { state.view = 'admin'; state.selected = null; renderView(); renderFolders(); },
         },
-      }, '退出'),
+          h('span', { class: 'foot-ico', html: icon('shield', 14) }),
+          h('span', { text: '管理后台' }),
+        )
+      : null,
+    h('button', {
+      class: 'foot-btn', type: 'button',
+      onClick: async () => {
+        await api('/api/auth/logout', { method: 'POST' });
+        state.user = null;
+        renderAuth('login');
+      },
+    },
+      h('span', { class: 'foot-ico', html: icon('power', 14) }),
+      h('span', { text: '退出登录' }),
     ),
   );
 }
@@ -615,25 +659,30 @@ async function renderAliasView(toolbar, content) {
 
 // ---------- 邮件视图 ----------
 function renderMail(toolbar, content) {
-  toolbar.append(
+  const unread = state.messages.filter((m) => !m.seen).length;
+  toolbar.replaceChildren(
     h('h2', { text: FOLDER_LABEL[state.folder] || state.folder }),
-    h('span', { class: 'count', text: `${state.messages.length} 封` }),
+    h('span', { class: 'count', text: `${unread} 封未读` }),
     h('div', { class: 'spacer' }),
-    h('button', {
-      class: 'icon-btn', title: '刷新', html: icon('refresh', 16),
-      onClick: () => { loadMessages(); renderFolders(); },
-    }),
-    state.folder === 'Trash'
-      ? h('button', {
-          class: 'btn sm ghost', onClick: async () => {
-            if (!confirm('清空垃圾箱？此操作不可恢复。')) return;
-            await api(`/api/folders/${state.folder}/empty`, { method: 'POST' });
-            toast('已清空');
-            loadMessages();
-            renderFolders();
-          },
-        }, '清空')
-      : null,
+    h('div', { class: 'acts' },
+      h('button', {
+        class: 'icon-btn', title: '刷新', html: icon('refresh', 16),
+        onClick: () => { loadMessages(); renderFolders(); },
+      }),
+      state.folder === 'Trash'
+        ? h('button', {
+            class: 'btn sm ghost', onClick: async () => {
+              if (!confirm('清空垃圾箱？此操作不可恢复。')) return;
+              await api(`/api/folders/${state.folder}/empty`, { method: 'POST' });
+              toast('已清空');
+              loadMessages();
+              renderFolders();
+            },
+          }, '清空')
+        : null,
+      h('button', { class: 'btn sm ghost', title: '阅读布局' },
+        h('span', { html: icon('layers', 14) }), h('span', { text: '阅读布局' })),
+    ),
   );
 
   const list = h('div', { class: `list-pane ${state.selected ? 'with-read' : 'full'}` });
@@ -646,12 +695,12 @@ function renderMail(toolbar, content) {
   loadMessages();
 }
 
-// 筛选胶囊（Postbox .chip）
+// 筛选胶囊（实测：h-28 / r=7px / 12px-500 / 激活 rgb(237,243,255) + rgb(29,78,216)）
 function buildFilterBar() {
   const items = [
-    { key: 'all', label: '全部' },
-    { key: 'unread', label: '未读' },
-    { key: 'flagged', label: '星标' },
+    { key: 'all', label: '全部邮件' },
+    { key: 'unread', label: '未读邮件' },
+    { key: 'flagged', label: '星标邮件' },
     { key: 'attach', label: '附件' },
   ];
   return h('div', { class: 'filter-bar' },
@@ -686,13 +735,6 @@ async function loadMessages() {
 function renderList() {
   const list = state.refs.list;
   if (!list) return;
-  // 列表头（Postbox: .list-head 标题 + 计数）
-  const head = h('div', { class: 'list-head' },
-    h('div', { class: 'lt' },
-      h('h3', { text: FOLDER_LABEL[state.folder] || state.folder }),
-      h('span', { class: 'lc', text: `${state.messages.length} 封` }),
-    ),
-  );
 
   const rows = state.messages
     .filter((m) => {
@@ -717,33 +759,54 @@ function renderList() {
           ),
           h('div', { class: 'mi-sub', text: m.subject || '(无主题)' }),
           h('div', { class: 'mi-snip', text: m.snippet || '' }),
-          (m.hasAttachment || m.flagged || m.spamScore >= 5)
+          (m.hasAttachment || m.spamScore >= 5)
             ? h('div', { class: 'mi-flags' },
-                m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', html: icon('paperclip', 12) }) : null,
-                m.flagged ? h('span', { class: 'mi-star', title: '星标', html: icon('star', 12) }) : null,
+                m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', html: icon('paperclip', 11) }) : null,
                 m.spamScore >= 5 ? h('span', { class: 'mi-tag-warn', text: '垃圾' }) : null,
               )
             : null,
         ),
+        h('span', { class: 'mi-dot' }),
+        h('button', {
+          class: 'mi-tail', type: 'button',
+          title: m.flagged ? '取消星标' : '加星标',
+          html: icon('star', 14),
+          style: m.flagged ? 'color:rgb(240,169,43)' : '',
+          onClick: async (e) => {
+            e.stopPropagation();
+            const add = m.flagged ? [] : ['\\Flagged'];
+            const del = m.flagged ? ['\\Flagged'] : [];
+            await api(`/api/messages/${m.id}/flags`, { method: 'POST', body: { add, remove: del } });
+            m.flagged = !m.flagged;
+            renderList();
+          },
+        }),
       );
     });
 
+  const footBar = h('div', { class: 'list-foot' },
+    h('span', { class: 'l', text: `${rows.length} 封邮件` }),
+    h('span', { class: 'r' },
+      h('button', { class: 'icon-btn', type: 'button', title: '上一页', html: icon('chevronLeft', 14) }),
+      h('span', { class: 'pg-num', text: '1 / 1' }),
+      h('button', { class: 'icon-btn', type: 'button', title: '下一页', html: icon('chevronRight', 14) }),
+    ),
+  );
+
   if (!rows.length) {
-    // 保留列表头与筛选栏，否则用户无法切回其他筛选
     list.replaceChildren(
-      head,
       buildFilterBar(),
       h('div', { class: 'empty', style: 'min-height:240px' },
         h('div', {},
-          h('div', { class: 'empty-ico', html: icon(state.search ? 'search' : 'inboxEmpty', 44) }),
-          h('div', { text: state.search ? '没有匹配的邮件' : (state.filter ? '该筛选下没有邮件' : '这个文件夹是空的') }),
+          h('div', { class: 'empty-ico', html: icon(state.search ? 'search' : 'inboxEmpty', 34) }),
+          h('div', { class: 'empty-txt', text: state.search ? '没有匹配的邮件' : (state.filter ? '该筛选下没有邮件' : '这个文件夹是空的') }),
         ),
       ),
     );
     return;
   }
 
-  list.replaceChildren(head, buildFilterBar(), ...rows);
+  list.replaceChildren(buildFilterBar(), ...rows, footBar);
 }
 
 async function openMessage(id) {
