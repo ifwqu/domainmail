@@ -67,53 +67,6 @@ function toast(text) {
   t._timer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-// 复制到剪贴板（带降级方案）
-async function copyText(text) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {}
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, ta.value.length);
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
-// 复制按钮：点击后图标短暂变对勾
-function copyBtn(getText, { title = '复制', cls = 'copy-btn', size = 13 } = {}) {
-  const btn = h('button', { class: cls, title, type: 'button', html: icon('copy', size) });
-  btn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const text = typeof getText === 'function' ? getText() : getText;
-    if (!text) return;
-    const ok = await copyText(text);
-    if (ok) {
-      btn.innerHTML = icon('check', size);
-      btn.classList.add('copied');
-      toast(`已复制 ${text}`);
-      setTimeout(() => {
-        btn.innerHTML = icon('copy', size);
-        btn.classList.remove('copied');
-      }, 1400);
-    } else {
-      toast('复制失败，请手动选择');
-    }
-  });
-  return btn;
-}
-
 function fmtSize(n) {
   if (n < 1024) return `${n} B`;
   if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
@@ -169,7 +122,6 @@ const ICONS = {
   settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
-  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
 };
 
 // 生成内联 SVG 图标
@@ -341,11 +293,9 @@ function renderShell() {
   );
 
   const sidebar = h('aside', { class: 'sidebar' },
-    h('div', { class: 'side-label', text: '当前身份' }),
     h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
     h('button', { class: 'compose-btn', onClick: () => openCompose() },
       h('span', { class: 'ico', html: icon('pen', 15) }), h('span', { class: 'txt', text: '写邮件' })),
-    h('div', { class: 'side-label', text: '文件夹' }),
     folderList,
     aliasPanel,
     foot,
@@ -383,78 +333,39 @@ async function renderMailboxSwitcher() {
   const current = state.mailbox || state.user?.email || data.current;
   const cur = state.mailboxes.find((m) => m.address === current) || state.mailboxes[0];
   const isPrimary = cur?.type === 'primary';
-  const local = (cur?.address || '').split('@')[0];
-  const domain = (cur?.address || '').split('@')[1] || '';
-  const initial = (local || '?').slice(0, 1).toUpperCase();
 
-  const label = h('div', { class: 'mb-current', title: cur?.address || '' },
-    h('div', { class: 'mb-avatar', text: initial }),
+  const label = h('div', { class: 'mb-current' },
     h('div', { class: 'mb-label' },
-      h('div', { class: 'mb-top' },
-        h('span', { class: 'mb-name', text: local }),
-        h('span', { class: `mb-badge ${isPrimary ? 'primary' : 'alias'}`, text: isPrimary ? '主邮箱' : '别名' }),
-      ),
-      h('div', { class: 'mb-addr' },
-        h('span', { class: 'mb-local', text: local }),
-        h('span', { class: 'mb-domain', text: `@${domain}` }),
-      ),
+      h('span', { class: 'mb-badge', text: isPrimary ? '主' : '别名' }),
+      h('span', { class: 'mb-addr', text: cur?.address || '' }),
     ),
-    h('span', { class: 'mb-arrow', html: icon('chevronDown', 14) }),
+    h('span', { class: 'mb-arrow', text: '▾' }),
   );
-
-  // 侧边栏常驻的「复制邮箱地址」按钮（不用悬停就能看到）
-  const copyRow = h('button', { class: 'side-copy', type: 'button', title: '复制当前邮箱地址' },
-    h('span', { class: 'side-copy-ico', html: icon('copy', 13) }),
-    h('span', { class: 'side-copy-txt', text: '复制邮箱地址' }),
-  );
-  copyRow.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const addr = cur?.address;
-    if (!addr) return;
-    const ok = await copyText(addr);
-    if (!ok) { toast('复制失败，请手动选择'); return; }
-    const icoEl = copyRow.querySelector('.side-copy-ico');
-    const txtEl = copyRow.querySelector('.side-copy-txt');
-    copyRow.classList.add('done');
-    icoEl.innerHTML = icon('check', 13);
-    txtEl.textContent = '已复制';
-    toast(`已复制 ${addr}`);
-    setTimeout(() => {
-      copyRow.classList.remove('done');
-      icoEl.innerHTML = icon('copy', 13);
-      txtEl.textContent = '复制邮箱地址';
-    }, 1600);
-  });
 
   const menu = h('div', { class: 'mb-menu' });
   menu.style.display = 'none';
 
   const renderMenu = () => {
     menu.replaceChildren(
-      h('div', { class: 'mb-menu-head', text: '切换邮箱身份' }),
-      ...state.mailboxes.map((m) => {
-        const mLocal = m.address.split('@')[0];
-        const mDomain = m.address.split('@')[1] || '';
-        return h('div', {
+      ...state.mailboxes.map((m) =>
+        h('div', {
           class: `mb-item ${m.address === current ? 'on' : ''}`,
           onClick: () => switchMailbox(m.address),
         },
-          h('span', { class: 'mb-item-avatar', text: (mLocal || '?').slice(0, 1).toUpperCase() }),
-          h('span', { class: 'mb-item-body' },
-            h('span', { class: 'mb-item-local', text: mLocal }),
-            h('span', { class: 'mb-item-domain', text: `@${mDomain}` }),
-          ),
+          h('span', { class: 'mb-badge', text: m.type === 'primary' ? '主' : '别名' }),
+          h('span', { class: 'mb-addr', text: m.address }),
           m.unread > 0 ? h('span', { class: 'mb-unread', text: String(m.unread) }) : null,
-          copyBtn(() => m.address, { title: '复制', cls: 'mb-item-copy', size: 12 }),
-        );
-      }),
-      h('div', {
-        class: 'mb-manage',
-        onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); menu.style.display = 'none'; },
-      },
-        h('span', { class: 'mb-manage-ico', html: icon(state.mailboxes.length > 1 ? 'settings' : 'plus', 13) }),
-        h('span', { text: state.mailboxes.length > 1 ? '管理邮箱地址' : '新建邮箱地址' }),
+        )
       ),
+      state.mailboxes.length > 1
+        ? h('div', {
+            class: 'mb-manage',
+            onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); menu.style.display = 'none'; },
+          }, '管理邮箱地址 →')
+        : h('div', {
+            class: 'mb-manage',
+            onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); menu.style.display = 'none'; },
+          }, '+ 新建邮箱地址'),
     );
   };
 
@@ -468,7 +379,7 @@ async function renderMailboxSwitcher() {
   const closeMenu = () => { menu.style.display = 'none'; };
   document.addEventListener('click', closeMenu, { once: true });
 
-  box.replaceChildren(label, copyRow, menu);
+  box.replaceChildren(label, menu);
 }
 
 async function switchMailbox(address) {
@@ -519,7 +430,7 @@ async function renderAliasPanel() {
 
   const quickInput = h('input', {
     class: 'alias-quick-input',
-    placeholder: '新地址前缀，回车创建',
+    placeholder: '输入前缀，回车创建',
   });
 
   const doQuick = async () => {
@@ -530,70 +441,40 @@ async function renderAliasPanel() {
       quickInput.value = '';
       toast(`已创建 ${r.alias.address}`);
       await renderAliasPanel();
-      await renderMailboxSwitcher();
     } catch (e) { toast(e.message); }
   };
 
   quickInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doQuick(); });
 
-  const items = data.aliases.slice(0, 6).map((a) => {
-    const local = a.address.split('@')[0];
-    const domain = a.address.split('@')[1] || '';
-    const row = h('div', { class: 'alias-item', title: `点击复制 ${a.address}` },
+  const items = data.aliases.slice(0, 6).map((a) =>
+    h('div', { class: 'alias-item', title: a.address },
       h('span', { class: 'alias-dot' }),
-      h('span', { class: 'alias-addr' },
-        h('span', { class: 'alias-local', text: local }),
-        h('span', { class: 'alias-domain', text: `@${domain}` }),
-      ),
-      h('span', { class: 'alias-actions' },
-        h('button', { class: 'alias-copy', type: 'button', title: '复制', html: icon('copy', 12) }),
-        h('button', {
-          class: 'alias-del',
-          type: 'button',
-          title: '删除',
-          html: icon('trash', 12),
-        }),
-      ),
-    );
-
-    const copyEl = row.querySelector('.alias-copy');
-    const flash = () => {
-      copyEl.innerHTML = icon('check', 12);
-      row.classList.add('copied');
-      setTimeout(() => { copyEl.innerHTML = icon('copy', 12); row.classList.remove('copied'); }, 1400);
-    };
-
-    row.addEventListener('click', async () => {
-      const ok = await copyText(a.address);
-      if (ok) { flash(); toast(`已复制 ${a.address}`); }
-      else toast('复制失败，请手动选择');
-    });
-
-    row.querySelector('.alias-del').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (!confirm(`删除 ${a.address}？`)) return;
-      await api(`/api/aliases/${a.id}`, { method: 'DELETE' });
-      toast('已删除');
-      await renderAliasPanel();
-      await renderMailboxSwitcher();
-    });
-
-    return row;
-  });
+      h('span', { class: 'alias-addr', text: a.address.split('@')[0] }),
+      h('button', {
+        class: 'alias-del',
+        title: '删除',
+        html: icon('trash', 12),
+        onClick: async (e) => {
+          e.stopPropagation();
+          if (!confirm(`删除 ${a.address}？`)) return;
+          await api(`/api/aliases/${a.id}`, { method: 'DELETE' });
+          toast('已删除');
+          await renderAliasPanel();
+        },
+      }),
+    )
+  );
 
   aliasPanel.replaceChildren(
     head,
     h('div', { class: 'alias-body' },
       h('div', { class: 'alias-quick' },
         quickInput,
-        h('button', { class: 'alias-add-btn', title: '创建', html: icon('plus', 15), onClick: doQuick }),
+        h('button', { class: 'alias-add-btn', title: '创建', html: icon('plus', 14), onClick: doQuick }),
       ),
       data.total > 0
         ? h('div', { class: 'alias-list' }, ...items)
-        : h('div', { class: 'alias-empty' },
-            h('span', { class: 'alias-empty-ico', html: icon('inboxEmpty', 20) }),
-            h('span', { text: '还没有额外地址' }),
-          ),
+        : h('div', { class: 'alias-empty', text: '还没有额外地址' }),
       data.total > 6
         ? h('div', { class: 'alias-hint', text: `还有 ${data.total - 6} 个地址` })
         : null,
@@ -601,8 +482,8 @@ async function renderAliasPanel() {
         class: 'alias-manage-btn',
         onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); },
       },
-        h('span', { text: '管理全部地址' }),
-        h('span', { class: 'alias-manage-ico', html: icon('chevronRight', 13) }),
+        h('span', { class: 'alias-manage-ico', html: icon('settings', 13) }),
+        h('span', { text: '管理 / 批量生成' }),
       ),
     ),
   );
@@ -635,38 +516,24 @@ async function renderFolders() {
 
 function renderFoot() {
   const { foot } = state.refs;
-  const email = state.user?.email || '';
-  const name = state.user?.displayName || email.split('@')[0] || '';
-  const initial = (name || '?').slice(0, 1).toUpperCase();
-
   foot.replaceChildren(
-    h('div', { class: 'me-card' },
-      h('div', { class: 'me-avatar', text: initial }),
-      h('div', { class: 'me-info' },
-        h('div', { class: 'me-name', text: name }),
-        h('div', { class: 'me-mail', text: email }),
-      ),
-      copyBtn(() => email, { title: '复制登录邮箱', cls: 'me-copy', size: 12 }),
-    ),
-    h('div', { class: 'foot-actions' },
+    h('div', { class: 'me', text: state.user?.email || '' }),
+    h('div', { class: 'row' },
       h('button', {
-        class: 'foot-btn', title: '设置',
-        onClick: () => { state.view = 'settings'; state.selected = null; renderView(); renderFolders(); },
-      }, h('span', { class: 'foot-ico', html: icon('settings', 14) }), h('span', { text: '设置' })),
+        class: 'btn sm', onClick: () => { state.view = 'settings'; state.selected = null; renderView(); renderFolders(); },
+      }, '设置'),
       state.user?.isAdmin
         ? h('button', {
-            class: 'foot-btn', title: '管理后台',
-            onClick: () => { state.view = 'admin'; state.selected = null; renderView(); renderFolders(); },
-          }, h('span', { class: 'foot-ico', html: icon('shield', 14) }), h('span', { text: '管理' }))
+            class: 'btn sm', onClick: () => { state.view = 'admin'; state.selected = null; renderView(); renderFolders(); },
+          }, '管理')
         : null,
       h('button', {
-        class: 'foot-btn danger', title: '退出登录',
-        onClick: async () => {
+        class: 'btn sm', onClick: async () => {
           await api('/api/auth/logout', { method: 'POST' });
           state.user = null;
           renderAuth('login');
         },
-      }, h('span', { class: 'foot-ico', html: icon('power', 14) })),
+      }, '退出'),
     ),
   );
 }
@@ -915,12 +782,8 @@ function renderReader(m) {
         h('div', { class: 'reader-from' },
           h('strong', { text: m.fromName || m.from }),
           m.fromName ? h('span', { class: 'addr', text: `<${m.from}>` }) : null,
-          copyBtn(() => m.from, { title: '复制发件人地址', cls: 'reader-copy', size: 12 }),
         ),
-        h('div', { class: 'reader-to' },
-          h('span', { text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
-          copyBtn(() => m.mailbox || m.to, { title: '复制收件地址', cls: 'reader-copy', size: 12 }),
-        ),
+        h('div', { class: 'reader-to', text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
       ),
       h('div', { class: 'reader-when', text: fmtFull(m.date) }),
     ),
