@@ -167,10 +167,21 @@ export class WebServer {
     if (!fs.existsSync(full) || fs.statSync(full).isDirectory()) return false;
     const ext = path.extname(full).toLowerCase();
     const body = fs.readFileSync(full);
+    const st = fs.statSync(full);
+    const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+    const cacheControl = ext === '.html' ? 'no-cache' : 'no-cache, must-revalidate';
+    // 条件请求：命中则 304
+    if (ctx.req.headers['if-none-match'] === etag) {
+      ctx.res.writeHead(304, { ETag: etag, 'Cache-Control': cacheControl });
+      ctx.res.end();
+      return true;
+    }
     ctx.res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Content-Length': body.length,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
+      'Cache-Control': cacheControl,
+      ETag: etag,
+      'Last-Modified': st.mtime.toUTCString(),
     });
     // HEAD 只返回头
     ctx.res.end(ctx.req.method === 'HEAD' ? undefined : body);

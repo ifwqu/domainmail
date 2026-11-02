@@ -229,8 +229,30 @@ function renderShell() {
   const aliasPanel = h('div', { class: 'alias-panel' });
   const foot = h('div', { class: 'sidebar-foot' });
 
+  // 顶栏搜索（参考实现: 64px 通栏，含品牌 + 搜索 + 用户）
+  const topSearch = h('input', {
+    type: 'search', placeholder: '搜索邮件…', value: state.search,
+    onKeydown: (e) => {
+      if (e.key === 'Enter') { state.search = topSearch.value; loadMessages(); }
+    },
+  });
+  state.refs = state.refs || {};
+  state.refs.topSearch = topSearch;
+
+  const topbar = h('header', { class: 'topbar' },
+    h('div', { class: 'topbar-brand' },
+      h('span', { class: 'logo', html: MAIL_SVG }),
+      h('span', {}, '域名', h('b', { text: '邮箱' })),
+    ),
+    h('div', { class: 'topbar-search' },
+      h('span', { class: 'ico', text: '🔍' }), topSearch,
+    ),
+    h('div', { class: 'topbar-right' },
+      h('span', { class: 'topbar-user', text: state.mailbox || state.user?.email || '' }),
+    ),
+  );
+
   const sidebar = h('aside', { class: 'sidebar' },
-    h('div', { class: 'brand' }, h('span', { class: 'dot', html: MAIL_SVG }), h('span', {}, '域名', h('b', { text: '邮箱' }))),
     h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
     h('button', { class: 'compose-btn', onClick: () => openCompose() },
       h('span', { class: 'ico', text: '✎' }), h('span', { class: 'txt', text: '写邮件' })),
@@ -242,10 +264,11 @@ function renderShell() {
   const toolbar = h('div', { class: 'toolbar' });
   const content = h('div', { class: 'content' });
   const main = h('main', { class: 'main' }, toolbar, content);
+  const body = h('div', { class: 'body' }, sidebar, main);
 
-  app.append(h('div', { class: 'shell' }, sidebar, main));
+  app.append(h('div', { class: 'shell' }, topbar, body));
 
-  state.refs = { folderList, aliasPanel, foot, toolbar, content };
+  state.refs = { ...state.refs, folderList, aliasPanel, foot, toolbar, content, topbar };
   renderMailboxSwitcher();
   renderFolders();
   renderAliasPanel();
@@ -499,19 +522,10 @@ async function renderAliasView(toolbar, content) {
 
 // ---------- 邮件视图 ----------
 function renderMail(toolbar, content) {
-  const searchInput = h('input', {
-    type: 'search', placeholder: '搜索邮件…', value: state.search,
-    onKeydown: (e) => {
-      if (e.key === 'Enter') { state.search = searchInput.value; loadMessages(); }
-    },
-  });
-
   toolbar.append(
     h('h2', { text: FOLDER_LABEL[state.folder] || state.folder }),
     h('span', { class: 'count', text: `${state.messages.length} 封` }),
     h('div', { class: 'spacer' }),
-    h('div', { class: 'search-box' },
-      h('span', { class: 'ico', text: '🔍' }), searchInput),
     h('button', {
       class: 'icon-btn', title: '刷新', onClick: () => { loadMessages(); renderFolders(); },
     }, '↻'),
@@ -528,7 +542,7 @@ function renderMail(toolbar, content) {
       : null,
   );
 
-  const list = h('div', { class: `list-pane ${state.selected ? 'full' : ''}` });
+  const list = h('div', { class: `list-pane ${state.selected ? 'with-read' : 'full'}` });
   const read = h('div', { class: 'read-pane' });
   content.append(list, read);
   state.refs.list = list;
