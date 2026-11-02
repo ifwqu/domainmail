@@ -1,19 +1,30 @@
 {
-  "name": "domsmtp",
+  "name": "domainmail",
   "version": "1.0.0",
   "private": true,
-  "description": "自建域名邮箱系统：SMTP 收信 + Submission 发信 + IMAP + Webmail + 管理后台 + DKIM",
+  "description": "零第三方依赖的自建域名邮箱：SMTP 收信 + 587 提交 + IMAP4rev1 + Webmail + 无限别名 + 管理后台 + DKIM + 出站队列",
+  "keywords": [
+    "mail-server",
+    "smtp",
+    "imap",
+    "webmail",
+    "dkim",
+    "self-hosted",
+    "nodejs",
+    "zero-dependency"
+  ],
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
   },
   "bin": {
-    "domsmtp": "./src/cli.js"
+    "domainmail": "./src/cli.js"
   },
   "scripts": {
     "start": "node src/main.js",
     "dev": "node --watch src/main.js",
     "init": "node src/cli.js init",
+    "dnscheck": "node src/dnscheck.js",
     "test": "node test/e2e.js"
   }
 }

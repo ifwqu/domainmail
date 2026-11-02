@@ -1,6 +1,6 @@
 FROM node:22-alpine
 
-RUN apk add --no-cache tzdata ca-certificates openssl \
+RUN apk add --no-cache tzdata ca-certificates \
     && addgroup -S mail && adduser -S mail -G mail
 
 WORKDIR /app
