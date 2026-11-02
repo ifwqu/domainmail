@@ -292,16 +292,24 @@ a { color: var(--blue); text-decoration: none; }
   background: var(--avatar-bg);
   color: var(--blue);
 }
-.mb-label { min-width: 0; flex: 1 1 0; margin-right: 22px; }
-/* 完整邮箱地址：12px 单行优先，实在放不下才在 @ 后换行 */
+.mb-label { min-width: 0; flex: 1 1 0; margin-right: 24px; }
+/* 完整邮箱地址：严格单行，字号由 JS 自适应缩小 */
 .mb-addr {
   display: block;
   font-size: 12px;
   font-weight: 500;
-  line-height: 1.45;
+  line-height: 1.4;
   color: var(--side-text);
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
   word-break: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+}
+/* 极小宽度下最小字号仍放不下时的省略兜底 */
+.mb-addr.mb-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 箭头与复制按钮共用右侧同一个槽位：默认箭头，悬停变复制 */
@@ -360,15 +368,21 @@ a { color: var(--blue); text-decoration: none; }
 }
 .mb-item:hover { background: var(--blue-soft-2); }
 .mb-item.on { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
-/* 下拉项里的地址同样完整显示 */
+/* 下拉项里的地址同样严格单行 */
 .mb-item .mb-addr {
   flex: 1 1 0;
   min-width: 0;
   font-size: 12.5px;
   font-weight: inherit;
   color: inherit;
+  white-space: nowrap;
+  overflow: visible;
   word-break: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+}
+.mb-item .mb-addr.mb-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mb-item-copy {
   display: flex;
@@ -1537,9 +1551,16 @@ textarea.input { height: auto; padding: 10px 12px; line-height: 1.6; resize: ver
 }
 
 /* ================= 响应式 ================= */
+/* 侧栏变窄时优先保住邮箱地址的宽度：隐藏图标、收紧内边距 */
+@media (max-width: 1400px) {
+  .mb-icon { display: none; }
+  .mb-current { padding-left: 10px; }
+}
 @media (max-width: 1180px) {
   .topbar-brand { width: auto; }
   .topbar-search { max-width: none; }
+  .mb-current { padding: 8px; gap: 4px; }
+  .mb-label { margin-right: 22px; }
 }
 @media (max-width: 860px) {
   .body { padding: 0 8px 8px; }

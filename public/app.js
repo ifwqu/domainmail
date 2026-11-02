@@ -361,19 +361,33 @@ function go(view) {
   renderFolders();
 }
 
-// 邮箱地址节点：优先在 @ 之后换行，避免 break-all 从中间截断
+// 邮箱地址节点：始终单行显示
 function addrNode(address) {
   const s = String(address || '');
-  const at = s.indexOf('@');
-  const span = h('span', { class: 'mb-addr', title: s });
-  if (at <= 0) {
-    span.textContent = s;
-    return span;
+  return h('span', { class: 'mb-addr', title: s, text: s });
+}
+
+// 让文本严格保持一行：字号自适应缩小，直到放得下；实在放不下才省略
+function fitOneLine(el, { max = 12, min = 7, step = 0.5 } = {}) {
+  if (!el) return;
+  el.classList.remove('mb-ellipsis');
+  el.style.whiteSpace = 'nowrap';
+  el.style.fontSize = `${max}px`;
+  const overflow = () => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1;
+  if (!overflow()) return;
+  let size = max;
+  while (size > min && overflow()) {
+    size -= step;
+    el.style.fontSize = `${size}px`;
   }
-  span.append(document.createTextNode(s.slice(0, at + 1)));
-  span.append(h('wbr'));
-  span.append(document.createTextNode(s.slice(at + 1)));
-  return span;
+  // 最小字号仍溢出 → 省略号兜底，避免视觉溢出
+  if (overflow()) el.classList.add('mb-ellipsis');
+}
+
+// 对所有身份卡/下拉项地址执行单行自适应
+function fitAllAddresses() {
+  document.querySelectorAll('.mb-current .mb-addr').forEach((el) => fitOneLine(el, { max: 12, min: 8 }));
+  document.querySelectorAll('.mb-item .mb-addr').forEach((el) => fitOneLine(el, { max: 12.5, min: 8.5 }));
 }
 
 // ---------- 邮箱切换器 ----------
@@ -411,6 +425,9 @@ async function renderMailboxSwitcher() {
       h('div', { class: 'mb-manage', onClick: () => { menu.classList.remove('open'); go('aliases'); } },
         state.mailboxes.length > 1 ? '管理邮箱地址 →' : '+ 新建邮箱地址'),
     );
+    requestAnimationFrame(() => {
+      menu.querySelectorAll('.mb-item .mb-addr').forEach((el) => fitOneLine(el, { max: 12.5, min: 8.5 }));
+    });
   };
 
   label.addEventListener('click', (e) => {
@@ -422,6 +439,10 @@ async function renderMailboxSwitcher() {
   document.addEventListener('click', () => menu.classList.remove('open'), { once: true });
 
   box.replaceChildren(label, menu);
+  // 渲染后自适应字号，保证单行
+  requestAnimationFrame(() => {
+    fitOneLine(label.querySelector('.mb-addr'), { max: 12, min: 8 });
+  });
 }
 
 async function switchMailbox(address) {
@@ -1348,6 +1369,13 @@ async function boot() {
   renderShell();
   await loadMessages();
   renderReader();
+
+  // 窗口尺寸变化时重新适配地址字号
+  let rt;
+  window.addEventListener('resize', () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => fitAllAddresses(), 120);
+  });
 }
 
 boot();
