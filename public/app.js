@@ -92,7 +92,41 @@ function fmtFull(ts) {
 const FOLDER_LABEL = {
   INBOX: '收件箱', Sent: '已发送', Drafts: '草稿箱', Trash: '垃圾箱', Junk: '垃圾邮件',
 };
-const FOLDER_ICON = { INBOX: '📥', Sent: '📤', Drafts: '📝', Trash: '🗑', Junk: '⚠️' };
+
+// ---------- 线性图标（Lucide 风格，1.75 描边，currentColor）----------
+const ICONS = {
+  inbox: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M22 7 13.03 12.7a2 2 0 0 1-2.06 0L2 7"/>',
+  send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>',
+  mailbox: '<path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7.57 3.57 6 5.5 6H18a4 4 0 0 1 4 4z"/><path d="M6 11h4"/><path d="M6 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  paperclip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+  reply: '<path d="M20 18v-2a4 4 0 0 0-4-4H4"/><path d="m9 17-5-5 5-5"/>',
+  forward: '<path d="M4 18v-2a4 4 0 0 1 4-4h12"/><path d="m15 7 5 5-5 5"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  inboxEmpty: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  infinity: '<path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"/>',
+  swap: '<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+};
+
+// 生成内联 SVG 图标
+function icon(name, size = 16, cls = '') {
+  const path = ICONS[name] || ICONS.folder;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="${cls}" aria-hidden="true">${path}</svg>`;
+}
+
+const FOLDER_ICON = {
+  INBOX: 'inbox', Sent: 'send', Drafts: 'file', Trash: 'trash', Junk: 'alert',
+};
 
 // 首字头像：shadcn 风格统一使用 muted 灰，不抢视觉
 function avatarColor() {
@@ -206,9 +240,9 @@ function renderAuth(mode = 'login') {
         h('h1', { class: 'portal-h1' }, h1l1, h1l2),
         h('div', { class: 'portal-domain' }, domainNote),
         h('div', { class: 'portal-features' },
-          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', text: '∞' }), h('span', { text: '无限别名地址' })),
-          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', text: '⇄' }), h('span', { text: '多身份一键切换' })),
-          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', text: '✓' }), h('span', { text: 'DKIM 签名直达收件箱' })),
+          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', html: icon('infinity', 15) }), h('span', { text: '无限别名地址' })),
+          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', html: icon('swap', 15) }), h('span', { text: '多身份一键切换' })),
+          h('div', { class: 'portal-feature' }, h('span', { class: 'fi', html: icon('shield', 15) }), h('span', { text: 'DKIM 签名直达收件箱' })),
         ),
       ),
       card,
@@ -245,7 +279,7 @@ function renderShell() {
       h('span', {}, '域名', h('b', { text: '邮箱' })),
     ),
     h('div', { class: 'topbar-search' },
-      h('span', { class: 'ico', text: '🔍' }), topSearch,
+      h('span', { class: 'ico', html: icon('search', 15) }), topSearch,
     ),
     h('div', { class: 'topbar-right' },
       h('span', { class: 'topbar-user', text: state.mailbox || state.user?.email || '' }),
@@ -255,7 +289,7 @@ function renderShell() {
   const sidebar = h('aside', { class: 'sidebar' },
     h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
     h('button', { class: 'compose-btn', onClick: () => openCompose() },
-      h('span', { class: 'ico', text: '✎' }), h('span', { class: 'txt', text: '写邮件' })),
+      h('span', { class: 'ico', html: icon('pen', 15) }), h('span', { class: 'txt', text: '写邮件' })),
     folderList,
     aliasPanel,
     foot,
@@ -377,7 +411,8 @@ async function renderAliasPanel() {
     class: 'alias-head',
     onClick: () => { state.aliasOpen = !open; renderAliasPanel(); },
   },
-    h('span', { text: '📮 我的邮箱' }),
+    h('span', { class: 'alias-ico', html: icon('mailbox', 14) }),
+    h('span', { text: '我的邮箱' }),
     h('span', { class: 'alias-count', text: String(data.total) }),
     h('span', { style: 'margin-left:auto;font-size:10px;color:var(--muted)', text: open ? '▾' : '▸' }),
   );
@@ -461,7 +496,7 @@ async function renderFolders() {
         class: `folder ${state.view === 'mail' && state.folder === f.name ? 'on' : ''}`,
         onClick: () => { state.view = 'mail'; state.folder = f.name; state.selected = null; renderView(); renderFolders(); },
       },
-        h('span', { class: 'ico', text: FOLDER_ICON[f.name] || '📁' }),
+        h('span', { class: 'ico', html: icon(FOLDER_ICON[f.name] || 'folder', 16) }),
         h('span', { class: 'name', text: FOLDER_LABEL[f.name] || f.name }),
         f.unread > 0
           ? h('span', { class: 'badge', text: String(f.unread) })
@@ -527,8 +562,9 @@ function renderMail(toolbar, content) {
     h('span', { class: 'count', text: `${state.messages.length} 封` }),
     h('div', { class: 'spacer' }),
     h('button', {
-      class: 'icon-btn', title: '刷新', onClick: () => { loadMessages(); renderFolders(); },
-    }, '↻'),
+      class: 'icon-btn', title: '刷新', html: icon('refresh', 16),
+      onClick: () => { loadMessages(); renderFolders(); },
+    }),
     state.folder === 'Trash'
       ? h('button', {
           class: 'btn sm ghost', onClick: async () => {
@@ -625,8 +661,8 @@ function renderList() {
           h('div', { class: 'mi-snip', text: m.snippet || '' }),
           (m.hasAttachment || m.flagged || m.spamScore >= 5)
             ? h('div', { class: 'mi-flags' },
-                m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', text: '📎' }) : null,
-                m.flagged ? h('span', { class: 'mi-star', text: '★' }) : null,
+                m.hasAttachment ? h('span', { class: 'mi-att', title: '附件', html: icon('paperclip', 12) }) : null,
+                m.flagged ? h('span', { class: 'mi-star', title: '星标', html: icon('star', 12) }) : null,
                 m.spamScore >= 5 ? h('span', { class: 'mi-tag-warn', text: '垃圾' }) : null,
               )
             : null,
@@ -641,7 +677,7 @@ function renderList() {
       buildFilterBar(),
       h('div', { class: 'empty', style: 'min-height:240px' },
         h('div', {},
-          h('div', { class: 'empty-ico', text: state.search ? '🔍' : '📭' }),
+          h('div', { class: 'empty-ico', html: icon(state.search ? 'search' : 'inboxEmpty', 44) }),
           h('div', { text: state.search ? '没有匹配的邮件' : (state.filter ? '该筛选下没有邮件' : '这个文件夹是空的') }),
         ),
       ),
@@ -688,20 +724,20 @@ function renderReader(m) {
   const readerBar = h('div', { class: 'reader-toolbar' },
     backBtn,
     h('button', {
-      class: 'icon-btn', title: '回复',
+      class: 'icon-btn', title: '回复', html: icon('reply', 16),
       onClick: () => openCompose({ to: m.from, subject: `Re: ${m.subject}`, inReplyTo: m.messageId }),
-    }, '↩'),
+    }),
     h('button', {
-      class: 'icon-btn', title: '转发',
+      class: 'icon-btn', title: '转发', html: icon('forward', 16),
       onClick: () => openCompose({ to: m.from, subject: `Fwd: ${m.subject}`, text: `\n\n-------- 转发邮件 --------\n发件人: ${m.from}\n日期: ${fmtFull(m.date)}\n主题: ${m.subject}\n\n${m.text}` }),
-    }, '↪'),
+    }),
     h('button', {
-      class: 'icon-btn', title: '星标',
+      class: 'icon-btn', title: '星标', html: icon('star', 16),
       onClick: async () => {
         await api(`/api/messages/${m.id}/flags`, { method: 'POST', body: { add: ['\\Flagged'] } });
         toast('已加星标'); loadMessages();
       },
-    }, '★'),
+    }),
     h('div', { class: 'spacer' }),
     isJunk
       ? h('button', {
@@ -711,21 +747,21 @@ function renderReader(m) {
           },
         }, '非垃圾')
       : null,
-    h('a', { class: 'icon-btn', href: `/api/messages/${m.id}/raw`, download: '', title: '下载原文' }, '⤓'),
+    h('a', { class: 'icon-btn', href: `/api/messages/${m.id}/raw`, download: '', title: '下载原文', html: icon('download', 16) }),
     m.folder !== 'Trash'
       ? h('button', {
-          class: 'icon-btn', title: '移入回收站', onClick: async () => {
+          class: 'icon-btn', title: '移入回收站', html: icon('trash', 16), onClick: async () => {
             await api(`/api/messages/${m.id}/move`, { method: 'POST', body: { folder: 'Trash' } });
             toast('已移入回收站'); state.selected = null; renderView(); renderFolders();
           },
-        }, '🗑')
+        })
       : h('button', {
-          class: 'icon-btn', title: '彻底删除', onClick: async () => {
+          class: 'icon-btn', title: '彻底删除', html: icon('trash', 16), onClick: async () => {
             if (!confirm('彻底删除这封邮件？')) return;
             await api(`/api/messages/${m.id}`, { method: 'DELETE' });
             toast('已删除'); state.selected = null; renderView(); renderFolders();
           },
-        }, '🗑'),
+        }),
   );
 
   const initial = (m.fromName || m.from || '?').trim().charAt(0).toUpperCase();
@@ -769,7 +805,7 @@ function renderReader(m) {
         h('div', { style: 'font-size:12px;color:hsl(var(--muted-foreground));margin-bottom:10px', text: `附件 ${m.attachments.length} 个` }),
         ...m.attachments.map((a) =>
           h('a', { class: 'att-item', href: `/api/attachments/${a.id}`, download: a.filename },
-            h('span', { text: '📎' }),
+            h('span', { class: 'att-ico', html: icon('paperclip', 13) }),
             h('span', { text: a.filename }),
             h('span', { class: 'sz', text: fmtSize(a.size) }),
           )
@@ -860,7 +896,7 @@ function openCompose(prefill = {}) {
   const box = h('div', { class: 'compose' },
     h('div', { class: 'compose-head' },
       h('h2', { text: prefill.inReplyTo ? '回复邮件' : '写邮件' }),
-      h('button', { class: 'icon-btn', title: '关闭', onClick: closeCompose }, '✕'),
+      h('button', { class: 'icon-btn', title: '关闭', html: icon('close', 16), onClick: closeCompose }),
     ),
     h('div', { class: 'compose-body' },
       h('div', { class: 'compose-fields' },
@@ -874,7 +910,7 @@ function openCompose(prefill = {}) {
     ),
     h('div', { class: 'compose-foot' },
       sendBtn,
-      h('button', { class: 'icon-btn', title: '添加附件', onClick: () => fileInput.click() }, '📎'),
+      h('button', { class: 'icon-btn', title: '添加附件', html: icon('paperclip', 16), onClick: () => fileInput.click() }),
       fileInput,
       h('span', { class: 'spacer' }),
       h('span', { class: 'hint', text: `发件人 ${state.mailbox || state.user?.email || ''}` }),
