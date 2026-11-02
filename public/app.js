@@ -10,6 +10,7 @@ const state = {
   search: '',
   filter: null, // all | unread | flagged | attach
   compose: null,
+  composeMask: null,
   attachments: [],
   // 当前使用的邮箱身份（主邮箱或别名），null = 主邮箱
   mailbox: null,
@@ -363,7 +364,7 @@ function renderShell() {
   const toolbar = h('div', { class: 'toolbar' });
   const content = h('div', { class: 'content' });
   const main = h('main', { class: 'main' }, toolbar, content);
-  const body = h('div', { class: 'body' }, sidebar, main);
+  const body = h('div', { class: 'body' }, sidebar, h('div', { class: 'panel-sep' }), main);
 
   app.append(h('div', { class: 'shell' }, topbar, body));
 
@@ -687,9 +688,14 @@ function renderMail(toolbar, content) {
 
   const list = h('div', { class: `list-pane ${state.selected ? 'with-read' : 'full'}` });
   const read = h('div', { class: 'read-pane' });
-  content.append(list, read);
+  if (state.selected) {
+    content.append(list, h('div', { class: 'panel-sep v' }), read);
+  } else {
+    content.append(list, read);
+  }
   state.refs.list = list;
   state.refs.read = read;
+  state.refs.content = content;
 
   if (state.selected) content.classList.add('reading');
   loadMessages();
@@ -887,43 +893,51 @@ function renderReader(m) {
 
   const initial = (m.fromName || m.from || '?').trim().charAt(0).toUpperCase();
 
-  const scroll = h('div', { class: 'reader-scroll' },
-    h('div', { class: 'reader-subject', text: m.subject || '(无主题)' }),
+  const scroll = h('div', { class: 'reader-scroll' });
+
+  // heading（p 22px 26px + 底边框）
+  const heading = h('div', { class: 'reader-heading' },
+    h('h2', { class: 'reader-subject', text: m.subject || '(无主题)' }),
     h('div', { class: 'reader-meta' },
       h('div', { class: 'avatar', text: initial }),
       h('div', { class: 'reader-meta-text' },
         h('div', { class: 'reader-from' },
           h('strong', { text: m.fromName || m.from }),
           m.fromName ? h('span', { class: 'addr', text: `<${m.from}>` }) : null,
+          copyBtn(() => m.from, { title: '复制发件人', cls: 'reader-copy', size: 12 }),
         ),
-        h('div', { class: 'reader-to', text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
+        h('div', { class: 'reader-to' },
+          h('span', { text: `收件人: ${m.mailbox || m.to}${m.cc ? ` · 抄送: ${m.cc}` : ''}` }),
+          copyBtn(() => (m.mailbox || m.to), { title: '复制收件地址', cls: 'reader-copy', size: 12 }),
+        ),
       ),
       h('div', { class: 'reader-when', text: fmtFull(m.date) }),
     ),
   );
+  scroll.append(heading);
 
-  read.append(readerBar, scroll);
-
+  // content（p 26px）
+  const contentBox = h('div', { class: 'reader-content' });
   const body = h('div', { class: 'read-body' });
   if (m.html) {
     const iframe = h('iframe', { sandbox: 'allow-same-origin' });
-    iframe.srcdoc = `<!DOCTYPE html><meta charset="utf-8"><base target="_blank"><style>body{margin:0;font:14px/1.6 -apple-system,"Segoe UI","PingFang SC",sans-serif;color:#1c2024;word-break:break-word}img{max-width:100%}</style>${m.html}`;
+    iframe.srcdoc = `<!DOCTYPE html><meta charset="utf-8"><base target="_blank"><style>body{margin:0;font:16px/1.8 -apple-system,"Segoe UI","PingFang SC",sans-serif;color:rgb(52,64,84);word-break:break-word}img{max-width:100%;border-radius:8px}a{color:rgb(37,99,235)}blockquote{border-left:3px solid #e4e4e7;margin:1rem 0;padding-left:1rem;color:#71717a}</style>${m.html}`;
     iframe.onload = () => {
       try {
         const d = iframe.contentDocument;
-        if (d) iframe.style.height = `${Math.min(Math.max(d.body.scrollHeight + 20, 200), 4000)}px`;
+        if (d) iframe.style.height = `${Math.min(Math.max(d.body.scrollHeight + 8, 120), 6000)}px`;
       } catch {}
     };
     body.append(iframe);
   } else {
     body.append(h('pre', { text: m.text || '(无正文)' }));
   }
-  scroll.append(body);
+  contentBox.append(body);
 
   if (m.attachments?.length) {
-    scroll.append(
+    contentBox.append(
       h('div', { class: 'att-list' },
-        h('div', { style: 'font-size:12px;color:hsl(var(--muted-foreground));margin-bottom:10px', text: `附件 ${m.attachments.length} 个` }),
+        h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:10px', text: `附件 ${m.attachments.length} 个` }),
         ...m.attachments.map((a) =>
           h('a', { class: 'att-item', href: `/api/attachments/${a.id}`, download: a.filename },
             h('span', { class: 'att-ico', html: icon('paperclip', 13) }),
@@ -934,6 +948,21 @@ function renderReader(m) {
       )
     );
   }
+  scroll.append(contentBox);
+
+  // actions（p 12px 24px + 上边框）
+  const actions = h('div', { class: 'reader-actions' },
+    h('button', {
+      class: 'btn primary sm', type: 'button',
+      onClick: () => openCompose({ to: m.from, subject: `Re: ${m.subject}`, inReplyTo: m.messageId }),
+    }, h('span', { html: icon('reply', 14) }), h('span', { text: '回复' })),
+    h('button', {
+      class: 'btn sm', type: 'button',
+      onClick: () => openCompose({ to: m.from, subject: `Fwd: ${m.subject}`, text: `\n\n-------- 转发邮件 --------\n发件人: ${m.from}\n日期: ${fmtFull(m.date)}\n主题: ${m.subject}\n\n${m.text}` }),
+    }, h('span', { html: icon('forward', 14) }), h('span', { text: '转发' })),
+  );
+
+  read.append(readerBar, scroll, actions);
 }
 
 
@@ -1010,36 +1039,42 @@ function openCompose(prefill = {}) {
   }, '发送');
 
   const closeCompose = () => {
-    state.compose.remove();
+    state.compose?.remove();
     state.compose = null;
+    state.composeMask?.remove();
+    state.composeMask = null;
   };
+
+  // 写信窗：1024×717 / r=16px / 居中 / 黑色遮罩
+  const mask = h('div', { class: 'compose-mask', onClick: closeCompose });
 
   const box = h('div', { class: 'compose' },
     h('div', { class: 'compose-head' },
       h('h2', { text: prefill.inReplyTo ? '回复邮件' : '写邮件' }),
-      h('button', { class: 'icon-btn', title: '关闭', html: icon('close', 16), onClick: closeCompose }),
+      h('button', { class: 'x', type: 'button', title: '关闭', html: icon('close', 16), onClick: closeCompose }),
     ),
     h('div', { class: 'compose-body' },
-      h('div', { class: 'compose-fields' },
-        errBox,
-        h('div', { class: 'compose-row' }, h('label', { text: '收件人' }), toInput),
-        h('div', { class: 'compose-row' }, h('label', { text: '抄送' }), ccInput),
-        h('div', { class: 'compose-row' }, h('label', { text: '主题' }), subjInput),
+      errBox,
+      h('div', { class: 'compose-row' }, h('label', { text: '收件人' }), toInput),
+      h('div', { class: 'compose-row' }, h('label', { text: '抄送' }), ccInput),
+      h('div', { class: 'compose-toolbar' },
+        h('button', { class: 'icon-btn', type: 'button', title: '添加附件', html: icon('paperclip', 16), onClick: () => fileInput.click() }),
+        fileInput,
+        attBox,
       ),
+      h('div', { class: 'compose-subject' }, subjInput),
       bodyInput,
-      attBox,
     ),
     h('div', { class: 'compose-foot' },
-      sendBtn,
-      h('button', { class: 'icon-btn', title: '添加附件', html: icon('paperclip', 16), onClick: () => fileInput.click() }),
-      fileInput,
-      h('span', { class: 'spacer' }),
       h('span', { class: 'hint', text: `发件人 ${state.mailbox || state.user?.email || ''}` }),
+      h('button', { class: 'btn sm', type: 'button', onClick: closeCompose }, '取消'),
+      sendBtn,
     ),
   );
 
-  document.body.append(box);
+  document.body.append(mask, box);
   state.compose = box;
+  state.composeMask = mask;
   setTimeout(() => toInput.focus(), 50);
 }
 
