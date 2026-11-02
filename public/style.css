@@ -340,6 +340,15 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
   background: #eff4ff; color: var(--blue); flex: 0 0 auto;
 }
 .mb-addr { font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-copy {
+  width: 20px; height: 20px; border-radius: 4px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-3); opacity: 0; transition: all .12s;
+}
+.mb-copy svg { display: block; }
+.mb-current:hover .mb-copy { opacity: 1; }
+.mb-copy:hover { background: #eff4ff; color: var(--blue); }
+.mb-copy.copied { opacity: 1; background: #f0fdf4; color: var(--ok); }
 .mb-arrow { color: var(--text-3); font-size: 10px; flex: 0 0 auto; }
 .mb-menu {
   position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 90;
@@ -440,14 +449,17 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px; letter-spacing: -.1px;
 }
-.alias-del {
+.alias-del, .alias-copy {
   width: 20px; height: 20px; flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 5px; color: var(--text-3);
   opacity: 0; transition: all .12s;
 }
-.alias-del svg { display: block; }
-.alias-item:hover .alias-del { opacity: 1; }
+.alias-del svg, .alias-copy svg { display: block; }
+.alias-item:hover .alias-del,
+.alias-item:hover .alias-copy { opacity: 1; }
+.alias-copy:hover { background: #eff4ff; color: var(--blue); }
+.alias-copy.copied { opacity: 1; background: #f0fdf4; color: var(--ok); }
 .alias-del:hover { background: #fef2f2; color: var(--g-red); }
 
 .alias-empty {

@@ -93,6 +93,53 @@ const FOLDER_LABEL = {
   INBOX: '收件箱', Sent: '已发送', Drafts: '草稿箱', Trash: '垃圾箱', Junk: '垃圾邮件',
 };
 
+// 复制到剪贴板（带降级方案）
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+// 复制按钮：点击后图标短暂变对勾
+function copyBtn(getText, { title = '复制', cls = 'copy-btn', size = 12 } = {}) {
+  const btn = h('button', { class: cls, title, type: 'button', html: icon('copy', size) });
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const text = typeof getText === 'function' ? getText() : getText;
+    if (!text) return;
+    const ok = await copyText(text);
+    if (ok) {
+      btn.innerHTML = icon('check', size);
+      btn.classList.add('copied');
+      toast(`已复制 ${text}`);
+      setTimeout(() => {
+        btn.innerHTML = icon('copy', size);
+        btn.classList.remove('copied');
+      }, 1400);
+    } else {
+      toast('复制失败，请手动选择');
+    }
+  });
+  return btn;
+}
+
 // ---------- 线性图标（Lucide 风格，1.75 描边，currentColor）----------
 const ICONS = {
   inbox: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M22 7 13.03 12.7a2 2 0 0 1-2.06 0L2 7"/>',
@@ -122,6 +169,7 @@ const ICONS = {
   settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
 };
 
 // 生成内联 SVG 图标
@@ -339,6 +387,7 @@ async function renderMailboxSwitcher() {
       h('span', { class: 'mb-badge', text: isPrimary ? '主' : '别名' }),
       h('span', { class: 'mb-addr', text: cur?.address || '' }),
     ),
+    copyBtn(() => cur?.address, { title: '复制邮箱地址', cls: 'mb-copy', size: 12 }),
     h('span', { class: 'mb-arrow', text: '▾' }),
   );
 
@@ -450,6 +499,7 @@ async function renderAliasPanel() {
     h('div', { class: 'alias-item', title: a.address },
       h('span', { class: 'alias-dot' }),
       h('span', { class: 'alias-addr', text: a.address.split('@')[0] }),
+      copyBtn(() => a.address, { title: '复制完整地址', cls: 'alias-copy', size: 12 }),
       h('button', {
         class: 'alias-del',
         title: '删除',
