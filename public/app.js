@@ -388,11 +388,12 @@ async function renderMailboxSwitcher() {
   const cur = state.mailboxes.find((m) => m.address === current) || state.mailboxes[0] || { address: state.user?.email };
 
   // 身份卡：完整地址换行显示 + 复制按钮 + 展开箭头
+  // 身份卡：完整地址 + 右侧箭头/复制共用槽位
   const label = h('div', { class: 'mb-current', title: cur.address },
-    h('span', { class: 'mb-icon', html: icon('mailbox', 16) }),
+    h('span', { class: 'mb-icon', html: icon('mailbox', 14) }),
     h('span', { class: 'mb-label' }, addrNode(cur.address)),
-    copyBtn(() => cur.address, { title: '复制邮箱地址', cls: 'mb-copy', size: 13 }),
     h('span', { class: 'mb-arrow', html: icon('chevronDown', 14) }),
+    copyBtn(() => cur.address, { title: '复制邮箱地址', cls: 'mb-copy', size: 12 }),
   );
 
   const menu = h('div', { class: 'mb-menu' });

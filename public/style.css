@@ -262,12 +262,13 @@ a { color: var(--blue); text-decoration: none; }
   padding: 14px 16px 12px;
 }
 
-/* 身份卡（邮箱切换器）：完整地址换行显示 */
+/* 身份卡（邮箱切换器）：对齐 参考实现 单行 48px，地址完整不省略 */
 .mailbox-switcher { position: relative; width: 100%; }
 .mb-current {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-height: 48px;
   padding: 8px 10px;
@@ -275,7 +276,7 @@ a { color: var(--blue); text-decoration: none; }
   border-radius: 8px;
   background: rgba(255, 255, 255, .7);
   color: var(--side-text);
-  font-size: 14px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
@@ -284,46 +285,51 @@ a { color: var(--blue); text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   background: var(--avatar-bg);
   color: var(--blue);
 }
-.mb-label { min-width: 0; flex: 1 1 0; }
-/* 完整邮箱地址：优先在 @ 后换行，超长才任意断行 */
+.mb-label { min-width: 0; flex: 1 1 0; margin-right: 22px; }
+/* 完整邮箱地址：12px 单行优先，实在放不下才在 @ 后换行 */
 .mb-addr {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.45;
   color: var(--side-text);
   word-break: normal;
   overflow-wrap: anywhere;
 }
-.mb-arrow { display: flex; flex-shrink: 0; color: var(--muted); }
 
-/* 复制按钮 */
+/* 箭头与复制按钮共用右侧同一个槽位：默认箭头，悬停变复制 */
+.mb-arrow,
 .mb-copy {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
-  color: #94a3b8;
-  opacity: 0;
   transition: opacity .15s, background .15s, color .15s;
 }
+.mb-arrow { color: var(--muted); opacity: 1; pointer-events: none; }
+.mb-copy { color: #94a3b8; opacity: 0; }
+.mb-current:hover .mb-arrow { opacity: 0; }
 .mb-current:hover .mb-copy { opacity: 1; }
 .mb-copy:hover { background: var(--blue-soft-2); color: var(--blue); }
 .mb-copy.copied { background: #f0fdf4; color: var(--ok); opacity: 1; }
-.mb-copy svg, .mb-item-copy svg { display: block; }
+.mb-current:hover .mb-copy.copied ~ .mb-arrow { opacity: 0; }
+.mb-copy svg, .mb-item-copy svg, .mb-arrow svg { display: block; }
 
 /* 下拉菜单 */
 .mb-menu {
