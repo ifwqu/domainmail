@@ -1,5 +1,5 @@
 // 前端：无框架，纯 ES Module + 手写渲染
-// 结构 1:1 对齐 参考实现 内部界面（实测数值）
+// 结构 1:1 对齐参考产品的内部界面（实测数值）
 const state = {
   user: null,
   folder: 'INBOX',
