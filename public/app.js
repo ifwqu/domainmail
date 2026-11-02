@@ -116,6 +116,12 @@ const ICONS = {
   infinity: '<path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"/>',
   swap: '<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>',
   shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
 };
 
 // 生成内联 SVG 图标
@@ -412,9 +418,9 @@ async function renderAliasPanel() {
     onClick: () => { state.aliasOpen = !open; renderAliasPanel(); },
   },
     h('span', { class: 'alias-ico', html: icon('mailbox', 14) }),
-    h('span', { text: '我的邮箱' }),
+    h('span', { class: 'alias-title', text: '我的邮箱' }),
     h('span', { class: 'alias-count', text: String(data.total) }),
-    h('span', { style: 'margin-left:auto;font-size:10px;color:var(--muted)', text: open ? '▾' : '▸' }),
+    h('span', { class: 'alias-caret', html: icon(open ? 'chevronDown' : 'chevronRight', 13) }),
   );
 
   if (!open) {
@@ -440,12 +446,14 @@ async function renderAliasPanel() {
 
   quickInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doQuick(); });
 
-  const items = data.aliases.slice(0, 8).map((a) =>
+  const items = data.aliases.slice(0, 6).map((a) =>
     h('div', { class: 'alias-item', title: a.address },
+      h('span', { class: 'alias-dot' }),
       h('span', { class: 'alias-addr', text: a.address.split('@')[0] }),
       h('button', {
         class: 'alias-del',
         title: '删除',
+        html: icon('trash', 12),
         onClick: async (e) => {
           e.stopPropagation();
           if (!confirm(`删除 ${a.address}？`)) return;
@@ -453,7 +461,7 @@ async function renderAliasPanel() {
           toast('已删除');
           await renderAliasPanel();
         },
-      }, '×'),
+      }),
     )
   );
 
@@ -462,21 +470,21 @@ async function renderAliasPanel() {
     h('div', { class: 'alias-body' },
       h('div', { class: 'alias-quick' },
         quickInput,
-        h('button', { class: 'btn sm primary', onClick: doQuick }, '+'),
+        h('button', { class: 'alias-add-btn', title: '创建', html: icon('plus', 14), onClick: doQuick }),
       ),
       data.total > 0
         ? h('div', { class: 'alias-list' }, ...items)
         : h('div', { class: 'alias-empty', text: '还没有额外地址' }),
-      data.total > 8
-        ? h('div', {
-            class: 'alias-more',
-            onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); },
-          }, `查看全部 ${data.total} 个 →`)
+      data.total > 6
+        ? h('div', { class: 'alias-hint', text: `还有 ${data.total - 6} 个地址` })
         : null,
-      h('div', {
-        class: 'alias-more',
+      h('button', {
+        class: 'alias-manage-btn',
         onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); },
-      }, '管理 / 批量生成 →'),
+      },
+        h('span', { class: 'alias-manage-ico', html: icon('settings', 13) }),
+        h('span', { text: '管理 / 批量生成' }),
+      ),
     ),
   );
 }
@@ -959,34 +967,56 @@ async function renderAliasCard() {
 
   const renderList = () => {
     if (!data.aliases.length) {
-      listBox.replaceChildren(h('div', { style: 'color:var(--muted);font-size:13px;padding:8px 0', text: '还没有额外地址，下面创建即可' }));
+      listBox.replaceChildren(
+        h('div', { class: 'alias-list-empty' },
+          h('span', { class: 'ale-ico', html: icon('inboxEmpty', 32) }),
+          h('div', { text: '还没有额外地址' }),
+          h('div', { class: 'ale-sub', text: '在上方填写前缀即可创建' }),
+        ),
+      );
       return;
     }
     listBox.replaceChildren(
-      h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:8px' },
-        `共 ${data.total} 个地址${data.unlimited ? '（无数量限制）' : ` / 上限 ${data.limit}`}`),
-      h('table', {},
-        h('thead', {}, h('tr', {}, h('th', { text: '邮箱地址' }), h('th', { text: '转发到' }), h('th', { text: '状态' }), h('th', {}, ''))),
+      h('table', { class: 'alias-table' },
+        h('thead', {}, h('tr', {},
+          h('th', { text: '邮箱地址' }),
+          h('th', { text: '转发到' }),
+          h('th', { text: '状态' }),
+          h('th', {}, ''),
+        )),
         h('tbody', {}, ...data.aliases.map((a) =>
           h('tr', {},
-            h('td', {}, h('code', { text: a.address })),
-            h('td', { style: 'font-size:12px', text: a.targets.join(', ') }),
-            h('td', {}, h('span', { class: a.active ? 'badge-ok' : 'badge-off', text: a.active ? '启用' : '停用' })),
+            h('td', {},
+              h('div', { class: 'at-addr' },
+                h('span', { class: 'at-dot' }),
+                h('code', { text: a.address }),
+              ),
+            ),
+            h('td', { class: 'at-target', text: a.targets.join(', ') }),
+            h('td', {},
+              h('span', { class: `at-badge ${a.active ? 'on' : 'off'}` },
+                a.active ? '启用' : '停用'),
+            ),
             h('td', { class: 'actions' },
               h('button', {
-                class: 'btn sm', onClick: async () => {
+                class: 'icon-btn', title: a.active ? '停用' : '启用',
+                html: icon('power', 15),
+                onClick: async () => {
                   await api(`/api/aliases/${a.id}`, { method: 'PUT', body: { active: !a.active } });
-                  data = await api('/api/aliases'); renderList(); renderAliasPanel(); toast(a.active ? '已停用' : '已启用');
+                  data = await api('/api/aliases'); renderList(); renderAliasPanel();
+                  toast(a.active ? '已停用' : '已启用');
                 },
-              }, a.active ? '停用' : '启用'),
-              ' ',
+              }),
               h('button', {
-                class: 'btn sm danger', onClick: async () => {
+                class: 'icon-btn', title: '删除',
+                html: icon('trash', 15),
+                onClick: async () => {
                   if (!confirm(`删除 ${a.address}？`)) return;
                   await api(`/api/aliases/${a.id}`, { method: 'DELETE' });
-                  data = await api('/api/aliases'); renderList(); renderAliasPanel(); toast('已删除');
+                  data = await api('/api/aliases'); renderList(); renderAliasPanel();
+                  toast('已删除');
                 },
-              }, '删除'),
+              }),
             ),
           )
         )),
@@ -1041,34 +1071,83 @@ async function renderAliasCard() {
     if (e.key === 'Enter') doBatch();
   });
 
-  return h('div', { class: 'card' },
-    h('h3', { text: '我的邮箱地址（无限邮箱）' }),
-    h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:12px' },
-      data.unlimited
-        ? '当前无数量限制，可以创建任意多个地址，全部投递到你的主邮箱。'
-        : `当前上限 ${data.limit} 个，已用 ${data.total} 个。`),
-    listBox,
-    h('div', { style: 'border-top:1px solid var(--border);margin-top:14px;padding-top:14px' },
-      h('div', { style: 'font-size:13px;font-weight:600;margin-bottom:8px', text: '新建邮箱地址' }),
-      h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:8px', text: '只需填前缀，回车即创建' }),
-      h('div', { class: 'inline-form' },
-        h('div', { class: 'field', style: 'flex:2' }, h('label', { text: '前缀' }), manualInput),
-        h('div', { class: 'field', style: 'flex:1' }, h('label', { text: '域名' }), manualDomain),
-        h('button', { class: 'btn primary', onClick: doManual }, '创建'),
-      ),
-      h('div', { style: 'margin:-6px 0 14px 0' }, manualPreview),
+  const statPill = (label, value, accent) =>
+    h('div', { class: 'alias-stat' },
+      h('span', { class: 'alias-stat-k', text: label }),
+      h('span', { class: `alias-stat-v ${accent ? 'accent' : ''}`, text: String(value) }),
+    );
 
-      h('div', { style: 'border-top:1px solid var(--border);padding-top:14px;margin-top:6px' },
-        h('div', { style: 'font-size:13px;font-weight:600;margin-bottom:8px', text: '批量生成' }),
-        h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:8px', text: '前缀留空则生成随机地址，填前缀则生成 前缀-1、前缀-2…' }),
-        h('div', { class: 'inline-form' },
-          h('div', { class: 'field', style: 'flex:2' }, h('label', { text: '前缀（可留空）' }), prefixInput),
-          h('div', { class: 'field', style: 'flex:1' }, h('label', { text: '域名' }), domainSelect),
-          h('div', { class: 'field', style: 'flex:0 0 90px' }, h('label', { text: '数量' }), countInput),
-          h('button', { class: 'btn', onClick: doBatch }, '生成'),
+  return h('div', { class: 'alias-page' },
+    // 顶部统计
+    h('div', { class: 'alias-stats' },
+      statPill('地址总数', data.total, true),
+      statPill('数量上限', data.unlimited ? '不限' : data.limit),
+      statPill('可用域名', data.domains.length),
+      statPill('单次批量', `≤${data.maxBatch || 500}`),
+    ),
+
+    // 新建（单条）
+    h('div', { class: 'alias-block' },
+      h('div', { class: 'alias-block-head' },
+        h('span', { class: 'ab-ico', html: icon('plus', 15) }),
+        h('div', {},
+          h('div', { class: 'ab-title', text: '新建邮箱地址' }),
+          h('div', { class: 'ab-desc', text: '只填前缀即可，自动补全域名' }),
         ),
-        h('div', { style: 'margin:-6px 0 0 0' }, preview),
       ),
+      h('div', { class: 'alias-form' },
+        h('div', { class: 'af-field' },
+          h('label', { text: '前缀' }),
+          manualInput,
+        ),
+        h('div', { class: 'af-field', style: 'flex:0 0 170px' },
+          h('label', { text: '域名' }),
+          manualDomain,
+        ),
+        h('button', { class: 'btn primary', onClick: doManual },
+          h('span', { class: 'btn-ico', html: icon('plus', 14) }), '创建'),
+      ),
+      h('div', { class: 'alias-preview' }, manualPreview),
+    ),
+
+    // 批量生成
+    h('div', { class: 'alias-block' },
+      h('div', { class: 'alias-block-head' },
+        h('span', { class: 'ab-ico', html: icon('layers', 15) }),
+        h('div', {},
+          h('div', { class: 'ab-title', text: '批量生成' }),
+          h('div', { class: 'ab-desc', text: '前缀留空生成随机地址；填前缀则生成 前缀-1、前缀-2…' }),
+        ),
+      ),
+      h('div', { class: 'alias-form' },
+        h('div', { class: 'af-field' },
+          h('label', { text: '前缀（可留空）' }),
+          prefixInput,
+        ),
+        h('div', { class: 'af-field', style: 'flex:0 0 170px' },
+          h('label', { text: '域名' }),
+          domainSelect,
+        ),
+        h('div', { class: 'af-field', style: 'flex:0 0 90px' },
+          h('label', { text: '数量' }),
+          countInput,
+        ),
+        h('button', { class: 'btn', onClick: doBatch },
+          h('span', { class: 'btn-ico', html: icon('layers', 14) }), '生成'),
+      ),
+      h('div', { class: 'alias-preview' }, preview),
+    ),
+
+    // 地址列表
+    h('div', { class: 'alias-block alias-block-list' },
+      h('div', { class: 'alias-block-head' },
+        h('span', { class: 'ab-ico', html: icon('mailbox', 15) }),
+        h('div', {},
+          h('div', { class: 'ab-title', text: '全部地址' }),
+          h('div', { class: 'ab-desc', text: data.unlimited ? '无数量限制，全部投递到主邮箱' : `上限 ${data.limit} 个` }),
+        ),
+      ),
+      listBox,
     ),
   );
 }
