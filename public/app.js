@@ -341,9 +341,11 @@ function renderShell() {
   );
 
   const sidebar = h('aside', { class: 'sidebar' },
+    h('div', { class: 'side-label', text: '当前身份' }),
     h('div', { class: 'mailbox-switcher', id: 'mailbox-switcher' }),
     h('button', { class: 'compose-btn', onClick: () => openCompose() },
       h('span', { class: 'ico', html: icon('pen', 15) }), h('span', { class: 'txt', text: '写邮件' })),
+    h('div', { class: 'side-label', text: '文件夹' }),
     folderList,
     aliasPanel,
     foot,
@@ -381,34 +383,71 @@ async function renderMailboxSwitcher() {
   const current = state.mailbox || state.user?.email || data.current;
   const cur = state.mailboxes.find((m) => m.address === current) || state.mailboxes[0];
   const isPrimary = cur?.type === 'primary';
+  const local = (cur?.address || '').split('@')[0];
+  const domain = (cur?.address || '').split('@')[1] || '';
+  const initial = (local || '?').slice(0, 1).toUpperCase();
 
-  const label = h('div', { class: 'mb-current' },
+  const label = h('div', { class: 'mb-current', title: cur?.address || '' },
+    h('div', { class: 'mb-avatar', text: initial }),
     h('div', { class: 'mb-label' },
-      h('span', { class: 'mb-badge', text: isPrimary ? '主' : '别名' }),
-      h('span', { class: 'mb-addr', text: cur?.address || '' }),
+      h('div', { class: 'mb-top' },
+        h('span', { class: 'mb-name', text: local }),
+        h('span', { class: `mb-badge ${isPrimary ? 'primary' : 'alias'}`, text: isPrimary ? '主邮箱' : '别名' }),
+      ),
+      h('div', { class: 'mb-addr' },
+        h('span', { class: 'mb-local', text: local }),
+        h('span', { class: 'mb-domain', text: `@${domain}` }),
+      ),
     ),
-    h('span', { class: 'mb-actions' },
-      copyBtn(() => cur?.address, { title: '复制当前地址', cls: 'mb-copy', size: 12 }),
-      h('span', { class: 'mb-arrow', html: icon('chevronDown', 12) }),
-    ),
+    h('span', { class: 'mb-arrow', html: icon('chevronDown', 14) }),
   );
+
+  // 侧边栏常驻的「复制邮箱地址」按钮（不用悬停就能看到）
+  const copyRow = h('button', { class: 'side-copy', type: 'button', title: '复制当前邮箱地址' },
+    h('span', { class: 'side-copy-ico', html: icon('copy', 13) }),
+    h('span', { class: 'side-copy-txt', text: '复制邮箱地址' }),
+  );
+  copyRow.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const addr = cur?.address;
+    if (!addr) return;
+    const ok = await copyText(addr);
+    if (!ok) { toast('复制失败，请手动选择'); return; }
+    const icoEl = copyRow.querySelector('.side-copy-ico');
+    const txtEl = copyRow.querySelector('.side-copy-txt');
+    copyRow.classList.add('done');
+    icoEl.innerHTML = icon('check', 13);
+    txtEl.textContent = '已复制';
+    toast(`已复制 ${addr}`);
+    setTimeout(() => {
+      copyRow.classList.remove('done');
+      icoEl.innerHTML = icon('copy', 13);
+      txtEl.textContent = '复制邮箱地址';
+    }, 1600);
+  });
 
   const menu = h('div', { class: 'mb-menu' });
   menu.style.display = 'none';
 
   const renderMenu = () => {
     menu.replaceChildren(
-      ...state.mailboxes.map((m) =>
-        h('div', {
+      h('div', { class: 'mb-menu-head', text: '切换邮箱身份' }),
+      ...state.mailboxes.map((m) => {
+        const mLocal = m.address.split('@')[0];
+        const mDomain = m.address.split('@')[1] || '';
+        return h('div', {
           class: `mb-item ${m.address === current ? 'on' : ''}`,
           onClick: () => switchMailbox(m.address),
         },
-          h('span', { class: 'mb-badge', text: m.type === 'primary' ? '主' : '别名' }),
-          h('span', { class: 'mb-addr', text: m.address }),
+          h('span', { class: 'mb-item-avatar', text: (mLocal || '?').slice(0, 1).toUpperCase() }),
+          h('span', { class: 'mb-item-body' },
+            h('span', { class: 'mb-item-local', text: mLocal }),
+            h('span', { class: 'mb-item-domain', text: `@${mDomain}` }),
+          ),
           m.unread > 0 ? h('span', { class: 'mb-unread', text: String(m.unread) }) : null,
           copyBtn(() => m.address, { title: '复制', cls: 'mb-item-copy', size: 12 }),
-        )
-      ),
+        );
+      }),
       h('div', {
         class: 'mb-manage',
         onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); menu.style.display = 'none'; },
@@ -429,7 +468,7 @@ async function renderMailboxSwitcher() {
   const closeMenu = () => { menu.style.display = 'none'; };
   document.addEventListener('click', closeMenu, { once: true });
 
-  box.replaceChildren(label, menu);
+  box.replaceChildren(label, copyRow, menu);
 }
 
 async function switchMailbox(address) {
@@ -467,10 +506,10 @@ async function renderAliasPanel() {
     class: 'alias-head',
     onClick: () => { state.aliasOpen = !open; renderAliasPanel(); },
   },
-    h('span', { class: 'alias-ico', html: icon('mailbox', 15) }),
+    h('span', { class: 'alias-ico', html: icon('mailbox', 14) }),
     h('span', { class: 'alias-title', text: '我的邮箱' }),
     h('span', { class: 'alias-count', text: String(data.total) }),
-    h('span', { class: 'alias-caret', html: icon(open ? 'chevronDown' : 'chevronRight', 14) }),
+    h('span', { class: 'alias-caret', html: icon(open ? 'chevronDown' : 'chevronRight', 13) }),
   );
 
   if (!open) {
@@ -480,7 +519,7 @@ async function renderAliasPanel() {
 
   const quickInput = h('input', {
     class: 'alias-quick-input',
-    placeholder: '输入前缀，回车创建',
+    placeholder: '新地址前缀，回车创建',
   });
 
   const doQuick = async () => {
@@ -491,6 +530,7 @@ async function renderAliasPanel() {
       quickInput.value = '';
       toast(`已创建 ${r.alias.address}`);
       await renderAliasPanel();
+      await renderMailboxSwitcher();
     } catch (e) { toast(e.message); }
   };
 
@@ -499,28 +539,46 @@ async function renderAliasPanel() {
   const items = data.aliases.slice(0, 6).map((a) => {
     const local = a.address.split('@')[0];
     const domain = a.address.split('@')[1] || '';
-    return h('div', { class: 'alias-item', title: a.address },
+    const row = h('div', { class: 'alias-item', title: `点击复制 ${a.address}` },
       h('span', { class: 'alias-dot' }),
       h('span', { class: 'alias-addr' },
         h('span', { class: 'alias-local', text: local }),
         h('span', { class: 'alias-domain', text: `@${domain}` }),
       ),
       h('span', { class: 'alias-actions' },
-        copyBtn(() => a.address, { title: '复制完整地址', cls: 'alias-copy', size: 12 }),
+        h('button', { class: 'alias-copy', type: 'button', title: '复制', html: icon('copy', 12) }),
         h('button', {
           class: 'alias-del',
+          type: 'button',
           title: '删除',
           html: icon('trash', 12),
-          onClick: async (e) => {
-            e.stopPropagation();
-            if (!confirm(`删除 ${a.address}？`)) return;
-            await api(`/api/aliases/${a.id}`, { method: 'DELETE' });
-            toast('已删除');
-            await renderAliasPanel();
-          },
         }),
       ),
     );
+
+    const copyEl = row.querySelector('.alias-copy');
+    const flash = () => {
+      copyEl.innerHTML = icon('check', 12);
+      row.classList.add('copied');
+      setTimeout(() => { copyEl.innerHTML = icon('copy', 12); row.classList.remove('copied'); }, 1400);
+    };
+
+    row.addEventListener('click', async () => {
+      const ok = await copyText(a.address);
+      if (ok) { flash(); toast(`已复制 ${a.address}`); }
+      else toast('复制失败，请手动选择');
+    });
+
+    row.querySelector('.alias-del').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`删除 ${a.address}？`)) return;
+      await api(`/api/aliases/${a.id}`, { method: 'DELETE' });
+      toast('已删除');
+      await renderAliasPanel();
+      await renderMailboxSwitcher();
+    });
+
+    return row;
   });
 
   aliasPanel.replaceChildren(
@@ -532,7 +590,10 @@ async function renderAliasPanel() {
       ),
       data.total > 0
         ? h('div', { class: 'alias-list' }, ...items)
-        : h('div', { class: 'alias-empty', text: '还没有额外地址' }),
+        : h('div', { class: 'alias-empty' },
+            h('span', { class: 'alias-empty-ico', html: icon('inboxEmpty', 20) }),
+            h('span', { text: '还没有额外地址' }),
+          ),
       data.total > 6
         ? h('div', { class: 'alias-hint', text: `还有 ${data.total - 6} 个地址` })
         : null,
@@ -540,8 +601,8 @@ async function renderAliasPanel() {
         class: 'alias-manage-btn',
         onClick: () => { state.view = 'aliases'; renderView(); renderFolders(); },
       },
-        h('span', { class: 'alias-manage-ico', html: icon('settings', 14) }),
-        h('span', { text: '管理 / 批量生成' }),
+        h('span', { text: '管理全部地址' }),
+        h('span', { class: 'alias-manage-ico', html: icon('chevronRight', 13) }),
       ),
     ),
   );
@@ -574,24 +635,38 @@ async function renderFolders() {
 
 function renderFoot() {
   const { foot } = state.refs;
+  const email = state.user?.email || '';
+  const name = state.user?.displayName || email.split('@')[0] || '';
+  const initial = (name || '?').slice(0, 1).toUpperCase();
+
   foot.replaceChildren(
-    h('div', { class: 'me', text: state.user?.email || '' }),
-    h('div', { class: 'row' },
+    h('div', { class: 'me-card' },
+      h('div', { class: 'me-avatar', text: initial }),
+      h('div', { class: 'me-info' },
+        h('div', { class: 'me-name', text: name }),
+        h('div', { class: 'me-mail', text: email }),
+      ),
+      copyBtn(() => email, { title: '复制登录邮箱', cls: 'me-copy', size: 12 }),
+    ),
+    h('div', { class: 'foot-actions' },
       h('button', {
-        class: 'btn sm', onClick: () => { state.view = 'settings'; state.selected = null; renderView(); renderFolders(); },
-      }, '设置'),
+        class: 'foot-btn', title: '设置',
+        onClick: () => { state.view = 'settings'; state.selected = null; renderView(); renderFolders(); },
+      }, h('span', { class: 'foot-ico', html: icon('settings', 14) }), h('span', { text: '设置' })),
       state.user?.isAdmin
         ? h('button', {
-            class: 'btn sm', onClick: () => { state.view = 'admin'; state.selected = null; renderView(); renderFolders(); },
-          }, '管理')
+            class: 'foot-btn', title: '管理后台',
+            onClick: () => { state.view = 'admin'; state.selected = null; renderView(); renderFolders(); },
+          }, h('span', { class: 'foot-ico', html: icon('shield', 14) }), h('span', { text: '管理' }))
         : null,
       h('button', {
-        class: 'btn sm', onClick: async () => {
+        class: 'foot-btn danger', title: '退出登录',
+        onClick: async () => {
           await api('/api/auth/logout', { method: 'POST' });
           state.user = null;
           renderAuth('login');
         },
-      }, '退出'),
+      }, h('span', { class: 'foot-ico', html: icon('power', 14) })),
     ),
   );
 }
