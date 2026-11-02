@@ -73,6 +73,52 @@ function toast(text) {
 
 const p2 = (n) => String(n).padStart(2, '0');
 
+// ---------- 复制 ----------
+async function copyText(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+// 复制按钮：点击后短暂变对勾
+function copyBtn(getText, { title = '复制邮箱地址', cls = 'copy-btn', size = 13 } = {}) {
+  const btn = h('button', { class: cls, type: 'button', title, html: icon('copy', size) });
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const text = typeof getText === 'function' ? getText() : getText;
+    if (!text) return;
+    const ok = await copyText(text);
+    if (!ok) return toast('复制失败');
+    btn.innerHTML = icon('check', size);
+    btn.classList.add('copied');
+    toast(`已复制 ${text}`);
+    setTimeout(() => {
+      btn.innerHTML = icon('copy', size);
+      btn.classList.remove('copied');
+    }, 1400);
+  });
+  return btn;
+}
+
 function fmtSize(n) {
   if (n < 1024) return `${n} B`;
   if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
@@ -315,6 +361,21 @@ function go(view) {
   renderFolders();
 }
 
+// 邮箱地址节点：优先在 @ 之后换行，避免 break-all 从中间截断
+function addrNode(address) {
+  const s = String(address || '');
+  const at = s.indexOf('@');
+  const span = h('span', { class: 'mb-addr', title: s });
+  if (at <= 0) {
+    span.textContent = s;
+    return span;
+  }
+  span.append(document.createTextNode(s.slice(0, at + 1)));
+  span.append(h('wbr'));
+  span.append(document.createTextNode(s.slice(at + 1)));
+  return span;
+}
+
 // ---------- 邮箱切换器 ----------
 async function renderMailboxSwitcher() {
   const box = document.getElementById('mailbox-switcher');
@@ -326,9 +387,11 @@ async function renderMailboxSwitcher() {
   const current = state.mailbox || state.user?.email || data.current;
   const cur = state.mailboxes.find((m) => m.address === current) || state.mailboxes[0] || { address: state.user?.email };
 
-  const label = h('button', { class: 'mb-current', type: 'button', title: cur.address },
+  // 身份卡：完整地址换行显示 + 复制按钮 + 展开箭头
+  const label = h('div', { class: 'mb-current', title: cur.address },
     h('span', { class: 'mb-icon', html: icon('mailbox', 16) }),
-    h('span', { class: 'mb-label' }, h('span', { class: 'mb-addr', text: cur.address || '' })),
+    h('span', { class: 'mb-label' }, addrNode(cur.address)),
+    copyBtn(() => cur.address, { title: '复制邮箱地址', cls: 'mb-copy', size: 13 }),
     h('span', { class: 'mb-arrow', html: icon('chevronDown', 14) }),
   );
 
@@ -340,8 +403,9 @@ async function renderMailboxSwitcher() {
         onClick: () => switchMailbox(m.address),
       },
         h('span', { class: 'mb-badge', text: m.type === 'primary' ? '主' : '别名' }),
-        h('span', { class: 'mb-addr', text: m.address }),
+        addrNode(m.address),
         m.unread > 0 ? h('span', { class: 'mb-unread', text: String(m.unread) }) : null,
+        copyBtn(() => m.address, { title: '复制', cls: 'mb-item-copy', size: 13 }),
       )),
       h('div', { class: 'mb-manage', onClick: () => { menu.classList.remove('open'); go('aliases'); } },
         state.mailboxes.length > 1 ? '管理邮箱地址 →' : '+ 新建邮箱地址'),
@@ -349,6 +413,7 @@ async function renderMailboxSwitcher() {
   };
 
   label.addEventListener('click', (e) => {
+    if (e.target.closest('.mb-copy')) return;
     e.stopPropagation();
     renderMenu();
     menu.classList.toggle('open');

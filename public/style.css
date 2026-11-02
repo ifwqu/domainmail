@@ -262,14 +262,14 @@ a { color: var(--blue); text-decoration: none; }
   padding: 14px 16px 12px;
 }
 
-/* 身份卡（邮箱切换器）194×48 */
+/* 身份卡（邮箱切换器）：完整地址换行显示 */
 .mailbox-switcher { position: relative; width: 100%; }
 .mb-current {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 48px;
+  min-height: 48px;
   padding: 8px 10px;
   border: 1px solid var(--line-2);
   border-radius: 8px;
@@ -292,16 +292,38 @@ a { color: var(--blue); text-decoration: none; }
   color: var(--blue);
 }
 .mb-label { min-width: 0; flex: 1 1 0; }
+/* 完整邮箱地址：优先在 @ 后换行，超长才任意断行 */
 .mb-addr {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.35;
   color: var(--side-text);
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 .mb-arrow { display: flex; flex-shrink: 0; color: var(--muted); }
+
+/* 复制按钮 */
+.mb-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  opacity: 0;
+  transition: opacity .15s, background .15s, color .15s;
+}
+.mb-current:hover .mb-copy { opacity: 1; }
+.mb-copy:hover { background: var(--blue-soft-2); color: var(--blue); }
+.mb-copy.copied { background: #f0fdf4; color: var(--ok); opacity: 1; }
+.mb-copy svg, .mb-item-copy svg { display: block; }
 
 /* 下拉菜单 */
 .mb-menu {
@@ -332,7 +354,34 @@ a { color: var(--blue); text-decoration: none; }
 }
 .mb-item:hover { background: var(--blue-soft-2); }
 .mb-item.on { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
-.mb-item .mb-addr { font-size: 12.5px; color: inherit; }
+/* 下拉项里的地址同样完整显示 */
+.mb-item .mb-addr {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: inherit;
+  color: inherit;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+.mb-item-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #94a3b8;
+  opacity: 0;
+  transition: opacity .15s, background .15s, color .15s;
+}
+.mb-item:hover .mb-item-copy { opacity: 1; }
+.mb-item-copy:hover { background: rgba(37, 99, 235, .1); color: var(--blue); }
+.mb-item-copy.copied { background: #f0fdf4; color: var(--ok); opacity: 1; }
 .mb-badge {
   flex-shrink: 0;
   padding: 2px 6px;
