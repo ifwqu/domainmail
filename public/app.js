@@ -482,6 +482,7 @@ async function switchMailbox(address) {
   await renderMailboxSwitcher();
   renderView();
   renderFolders();
+  await loadMessages();
   toast(`已切换到 ${address}`);
 }
 
