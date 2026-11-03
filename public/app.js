@@ -181,6 +181,7 @@ const ICONS = {
   tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
   eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
   chevronsLeft: '<path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/>',
+  menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
 };
 
 function icon(name, size = 16, cls = '') {
@@ -276,9 +277,14 @@ function renderShell() {
   });
 
   const topbar = h('header', { class: 'topbar' },
+    h('button', {
+      class: 'icon-btn topbar-menu', type: 'button', title: '菜单',
+      html: icon('menu', 20),
+      onClick: () => toggleDrawer(),
+    }),
     h('div', { class: 'topbar-brand' },
       h('span', { class: 'logo', html: MAIL_SVG }),
-      h('span', { text: '域名邮箱' }),
+      h('span', { class: 'topbar-title', text: '域名邮箱' }),
     ),
     h('div', { class: 'topbar-search' },
       h('span', { class: 'ico', html: icon('search', 16) }),
@@ -290,7 +296,7 @@ function renderShell() {
         h('span', { class: 'topbar-name', text: state.user?.displayName || (state.user?.email || '').split('@')[0] }),
       ),
       h('button', { class: 'topbar-lang', type: 'button', html: `${icon('globe', 14)}<span>简体中文</span>` }),
-      h('button', { class: 'icon-btn', type: 'button', title: '设置', html: icon('settings', 16), onClick: () => go('settings') }),
+      h('button', { class: 'icon-btn topbar-settings', type: 'button', title: '设置', html: icon('settings', 16), onClick: () => go('settings') }),
     ),
   );
 
@@ -341,15 +347,17 @@ function renderShell() {
   const content = h('div', { class: 'content' }, listPane, h('div', { class: 'panel-sep v' }), readPane);
   const main = h('main', { class: 'main' }, toolbar, filterBar, content);
   const body = h('div', { class: 'body' }, sidebar, h('div', { class: 'panel-sep' }), main);
+  const scrim = h('div', { class: 'side-scrim', onClick: () => closeDrawer() });
 
-  app.append(h('div', { class: 'app' }, topbar, body));
+  app.append(h('div', { class: 'app' }, topbar, body, scrim));
 
-  state.refs = { ...state.refs, folderList, tagList, foot, toolbar, filterBar, listPane, readPane, content, topbar, search };
+  state.refs = { ...state.refs, folderList, tagList, foot, toolbar, filterBar, listPane, readPane, content, topbar, search, sidebar, main };
 
   renderMailboxSwitcher();
   renderFolders();
   renderTags();
   renderFoot();
+  renderMobileBar();
   renderView();
 }
 
@@ -357,8 +365,27 @@ function go(view) {
   state.view = view;
   state.selected = null;
   state.selectedMsg = null;
+  closeDrawer();
   renderView();
   renderFolders();
+  renderMobileBar();
+}
+
+// ---------- 移动端抽屉 ----------
+function isMobile() {
+  return window.matchMedia('(max-width: 860px)').matches;
+}
+
+function toggleDrawer() {
+  const app = document.querySelector('.app');
+  if (!app) return;
+  app.classList.toggle('drawer-open');
+  document.body.classList.toggle('drawer-locked', app.classList.contains('drawer-open'));
+}
+
+function closeDrawer() {
+  document.querySelector('.app')?.classList.remove('drawer-open');
+  document.body.classList.remove('drawer-locked');
 }
 
 // 邮箱地址节点：单行 14px 显示
@@ -415,6 +442,33 @@ async function renderMailboxSwitcher() {
   box.replaceChildren(label, menu);
 }
 
+// 移动端底栏的「写信」按钮
+function renderMobileBar() {
+  const app = document.querySelector('.app');
+  if (!app) return;
+  app.querySelector('.mobile-bar')?.remove();
+  const active = (v) => (state.view === v ? ' on' : '');
+  const bar = h('nav', { class: 'mobile-bar' },
+    h('button', {
+      class: `mb-tab${active('mail')}`, type: 'button', html: `${icon('inbox', 20)}<span>邮件</span>`,
+      onClick: () => { state.view = 'mail'; closeDrawer(); renderView(); renderFolders(); renderMobileBar(); },
+    }),
+    h('button', {
+      class: 'mb-tab mb-tab-compose', type: 'button', html: `${icon('pen2', 20)}<span>写信</span>`,
+      onClick: () => openCompose(),
+    }),
+    h('button', {
+      class: `mb-tab${active('aliases')}`, type: 'button', html: `${icon('mailbox', 20)}<span>邮箱</span>`,
+      onClick: () => { go('aliases'); renderMobileBar(); },
+    }),
+    h('button', {
+      class: `mb-tab${active('settings')}`, type: 'button', html: `${icon('settings', 20)}<span>设置</span>`,
+      onClick: () => { go('settings'); renderMobileBar(); },
+    }),
+  );
+  app.append(bar);
+}
+
 async function switchMailbox(address) {
   const primary = state.mailboxes.find((m) => m.type === 'primary')?.address;
   state.mailbox = address === primary ? null : address;
@@ -448,6 +502,7 @@ function renderFolders() {
           state.selected = null;
           state.selectedMsg = null;
           state.page = 1;
+          closeDrawer();
           renderView();
           renderFolders();
           loadMessages();
@@ -491,6 +546,17 @@ function renderFoot() {
     ),
     h('button', { class: 'foot-btn', type: 'button', onClick: () => go('aliases') },
       h('span', { html: icon('mailbox', 16) }), h('span', { text: '我的邮箱' })),
+    state.user?.isAdmin
+      ? h('button', { class: 'foot-btn', type: 'button', onClick: () => go('admin') },
+        h('span', { html: icon('shield', 16) }), h('span', { text: '管理后台' }))
+      : null,
+    h('button', {
+      class: 'foot-btn', type: 'button',
+      onClick: async () => {
+        await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+        location.reload();
+      },
+    }, h('span', { html: icon('power', 16) }), h('span', { text: '退出登录' })),
   );
 }
 
@@ -676,6 +742,18 @@ async function openMessage(id) {
   state.view = 'mail';
   state.refs.content.classList.add('reading');
   renderList();
+  // 手机上先切到阅读视图，让用户看到加载反馈
+  if (isMobile()) {
+    const { readPane } = state.refs;
+    if (readPane) {
+      readPane.style.display = '';
+      readPane.replaceChildren(h('div', { class: 'reader-empty' },
+        h('div', { class: 'box', html: icon('inbox', 28) }),
+        h('p', { text: '加载中…' }),
+      ));
+    }
+    window.scrollTo(0, 0);
+  }
   try {
     const r = await api(`/api/messages/${id}`);
     state.selectedMsg = r;
