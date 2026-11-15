@@ -166,6 +166,25 @@ export const DEFAULT_CONFIG = {
     rejectScore: 100,
     blacklistFile: './data/blacklist.txt',
   },
+
+  // Telegram 推送：新邮件实时推到 Bot 对话
+  telegram: {
+    enabled: false,
+    botToken: '',
+    // 私聊为正数，群组/频道为负数（-100...）
+    chatId: '',
+    // 转发哪些事件
+    events: { inbound: true, outbound: false },
+    // 正文最多保留多少字（超出截断）
+    maxLength: 3500,
+    // 单条消息最小间隔，避免触发 Bot API 限流
+    minIntervalMs: 1100,
+    // 垃圾箱邮件不推送
+    skipJunk: true,
+    timezoneOffsetMinutes: 480,
+    apiBase: 'https://api.telegram.org',
+    timeoutMs: 15000,
+  },
 };
 
 export function loadConfig(configPath) {

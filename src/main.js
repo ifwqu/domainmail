@@ -8,6 +8,7 @@ import { TlsProvider } from './tls-provider.js';
 import { SmtpServer } from './smtp.js';
 import { ImapServer } from './imap.js';
 import { OutboxQueue } from './outbound.js';
+import { TelegramNotifier } from './telegram.js';
 import { AccountService } from './account.js';
 import { WebServer } from './web/server.js';
 import { registerRoutes, setDnsHostname } from './web/routes.js';
@@ -32,6 +33,7 @@ export async function createApp(configPath) {
   const store = new MailStore({ db, cfg, dkim });
   const outbox = new OutboxQueue({ cfg, db, dkim, tlsProvider });
   const account = new AccountService({ cfg, db, store, dkim, outbox });
+  const telegram = new TelegramNotifier({ cfg });
 
   setDnsHostname(cfg.hostname);
 
@@ -52,13 +54,13 @@ export async function createApp(configPath) {
     cfg: { ...cfg, __sessionSecret: loadOrCreateSecret(cfg) },
     db, store, dkim, outbox, services: {},
   });
-  registerRoutes(web, { cfg, db, store, dkim, account, outbox, tlsProvider });
+  registerRoutes(web, { cfg, db, store, dkim, account, outbox, tlsProvider, telegram });
 
-  const smtpIn = new SmtpServer({ cfg, db, store, dkim, tlsProvider, mode: 'inbound' });
-  const smtpSub = new SmtpServer({ cfg, db, store, dkim, tlsProvider, mode: 'submission' });
+  const smtpIn = new SmtpServer({ cfg, db, store, dkim, tlsProvider, telegram, mode: 'inbound' });
+  const smtpSub = new SmtpServer({ cfg, db, store, dkim, tlsProvider, telegram, mode: 'submission' });
   const imap = new ImapServer({ cfg, db, store, tlsProvider });
 
-  const app = { cfg, db, store, dkim, outbox, account, web, smtpIn, smtpSub, imap, tlsProvider };
+  const app = { cfg, db, store, dkim, outbox, account, web, smtpIn, smtpSub, imap, tlsProvider, telegram };
 
   app.start = async () => {
     if (cfg.http.enabled) await web.listen();

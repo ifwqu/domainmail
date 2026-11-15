@@ -5,7 +5,7 @@ import { HttpError, rawResponse } from './server.js';
 import { buildMime } from '../mime.js';
 import { SYSTEM_FOLDERS } from '../store.js';
 
-export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tlsProvider }) {
+export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tlsProvider, telegram }) {
   const adminPath = cfg.http.adminPath || '/admin';
 
   const wrap = (fn) => async (ctx) => {
@@ -586,6 +586,18 @@ export function registerRoutes(web, { cfg, db, store, dkim, account, outbox, tls
       db.run('DELETE FROM outbox WHERE id = ?', row.id);
     }
     return { ok: true };
+  }));
+
+  web.get('/api/admin/telegram', wrap(async (ctx) => {
+    web.requireAdmin(ctx);
+    return { telegram: telegram ? telegram.status() : { enabled: false } };
+  }));
+
+  web.post('/api/admin/telegram/test', wrap(async (ctx) => {
+    web.requireAdmin(ctx);
+    if (!telegram || !telegram.enabled) throw new HttpError(400, 'Telegram 推送未启用或未配置');
+    const r = await telegram.sendTest(ctx.body?.text);
+    return { ok: true, messageId: r?.message_id ?? null };
   }));
 
   web.get('/api/admin/audit', wrap(async (ctx) => {

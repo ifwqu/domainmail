@@ -326,6 +326,58 @@ DM_VPS_HOST=x.x.x.x DM_VPS_PASS=*** node .deploy-tools/backup-offsite.mjs 10
 
 ---
 
+## Telegram 推送
+
+新邮件落地后自动推送到 Telegram，手机上直接看谁发了什么，不用打开邮箱。
+
+**配置**（`config.json`）：
+
+```json
+{
+  "telegram": {
+    "enabled": true,
+    "botToken": "123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "chatId": "123456789",
+    "events": { "inbound": true, "outbound": false },
+    "maxLength": 3500,
+    "minIntervalMs": 1100,
+    "skipJunk": true,
+    "timezoneOffsetMinutes": 480
+  }
+}
+```
+
+**拿 botToken 和 chatId**：
+
+1. Telegram 里找 `@BotFather` → 发 `/newbot` → 起名字 → 拿到 `数字:字母串` 形式的 token
+2. 给你的 bot 发一条消息（私聊点 START，或把它拉进群）
+3. 访问 `https://api.telegram.org/bot<TOKEN>/getUpdates`，在返回的 `result[0].message.chat.id` 里读 chatId（私聊是正数，群/频道是负数 `-100...`）
+
+**行为**：
+
+| 配置项 | 说明 |
+|---|---|
+| `events.inbound` | 收信推送（默认开） |
+| `events.outbound` | 自己发出的邮件也推（默认关） |
+| `maxLength` | 正文最多保留字数，超出截断并提示 |
+| `skipJunk` | 判为垃圾邮件的（落到 Junk）不推送 |
+| `minIntervalMs` | 单条最小间隔，避免触发 Bot API 限流 |
+
+推送内容为一封邮件一条 HTML 消息：发件人、收件人、主题、时间、大小、正文、附件清单。整封邮件只推一次，不按收件人重复。
+
+**自检**：
+
+```bash
+curl -s https://mail.example.com/api/admin/telegram -b cookie.txt    # 看统计
+curl -s -X POST https://mail.example.com/api/admin/telegram/test -b cookie.txt
+```
+
+返回 `{"sent":3,"failed":0,...}` 即正常；`botToken` 在接口里只回显末 4 位。
+
+**注意**：消息经 Telegram 服务器中转，敏感邮件不建议全量推送。Bot API 免费，无需付费权限。
+
+---
+
 ## 常用命令
 
 ```bash

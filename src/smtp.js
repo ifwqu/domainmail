@@ -355,12 +355,13 @@ class SmtpSession {
 }
 
 export class SmtpServer {
-  constructor({ cfg, db, store, dkim, tlsProvider, mode = 'inbound', port }) {
+  constructor({ cfg, db, store, dkim, tlsProvider, telegram = null, mode = 'inbound', port }) {
     this.cfg = cfg;
     this.db = db;
     this.store = store;
     this.dkim = dkim;
     this.tlsProvider = tlsProvider;
+    this.telegram = telegram;
     this.mode = mode;
     this.port = port ?? (mode === 'submission' ? cfg.submission.port : cfg.smtp.port);
     this.host = mode === 'submission' ? cfg.submission.host : cfg.smtp.host;
@@ -471,11 +472,11 @@ export class SmtpServer {
     session.send(`250 2.0.0 已接收，队列 ID ${saved.map((s) => s.messageId).join(',')}`);
     log.info(`收信 from=<${from}> to=${rcpts.join(',')} ip=${ip} size=${raw.length} spam=${spam.score}`);
 
-    // 自动回复 / 转发
-    await this.postProcess({ parsed, raw, saved, from, rcpts });
+    // 自动回复 / 转发 / Telegram 推送
+    await this.postProcess({ parsed, raw, saved, from, rcpts, folder });
   }
 
-  async postProcess({ parsed, raw, saved, from, rcpts }) {
+  async postProcess({ parsed, raw, saved, from, rcpts, folder = 'INBOX' }) {
     for (const addr of rcpts) {
       const fwd = this.db.get('SELECT * FROM forwards WHERE address = ? AND active = 1', addr);
       if (fwd) {
@@ -504,6 +505,15 @@ export class SmtpServer {
           this.enqueue({ mailFrom: addr, rcptTo: parsed.from.address, raw: Buffer.from(autoRaw) });
           log.info(`自动回复 ${addr} -> ${parsed.from.address}`);
         }
+      }
+    }
+
+    // Telegram 推送（收信事件，整封邮件只推一次）
+    if (this.telegram?.enabled) {
+      try {
+        this.telegram.notify({ direction: 'inbound', parsed, rcpts, saved, folder });
+      } catch (e) {
+        log.warn(`TG 推送入队失败：${e.message}`);
       }
     }
   }
