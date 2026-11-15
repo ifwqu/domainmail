@@ -288,6 +288,44 @@ systemctl restart domainmail
 
 ---
 
+## 备份与恢复
+
+数据全在 `data/`（数据库、邮件原文、附件、DKIM 私钥）和 `config.json` 里。仓库自带两个脚本。
+
+**备份**（一致性快照，不影响服务运行）：
+
+```bash
+bash scripts/backup.sh          # 默认保留 14 份，存到 data/../backups/
+bash scripts/backup.sh 30       # 保留 30 份
+```
+
+用 `VACUUM INTO` 做数据库快照（WAL 模式下也能拿到一致状态），连同 DKIM 私钥、邮件原文、附件、出站暂存、`config.json` 一起打包，生成 `dm-时间戳.tar.gz` + `.sha256`，并写一份 `manifest.json` 记录各表行数，供恢复后比对。
+
+**恢复**（先自动快照当前状态，再覆盖，然后重启并比对行数）：
+
+```bash
+bash scripts/restore.sh                          # 列出可用备份
+bash scripts/restore.sh backups/dm-20261105-161126.tar.gz
+```
+
+恢复流程：SHA256 校验 → 预检归档内容 → 把当前状态存成 `pre-restore-*.tar.gz` → 停服务 → 覆盖 `data/` 与 `config.json` → 清 WAL/SHM → 启服务 → 用 manifest 逐表比对行数与账号列表。
+
+**每天自动备份**（systemd timer，UTC 03:20，带 5 分钟随机延迟）：
+
+```bash
+systemctl list-timers domainmail-backup.timer    # 看下次执行时间
+systemctl start domainmail-backup.service        # 立刻跑一次
+journalctl -u domainmail-backup.service -n 30    # 看结果
+```
+
+**异地备份**（把归档拉回本地，防止 VPS 整个丢失）：
+
+```bash
+DM_VPS_HOST=x.x.x.x DM_VPS_PASS=*** node .deploy-tools/backup-offsite.mjs 10
+```
+
+---
+
 ## 常用命令
 
 ```bash
@@ -400,7 +438,11 @@ mailserver/
 │   └── style.css         1574 行，设计令牌 + 暗色模式
 ├── test/
 │   ├── e2e.js            端到端测试（113 项断言）
+│   ├── forward-test.mjs  转发功能专项测试（38 项断言）
 │   └── client.js         SMTP / IMAP 测试客户端
+├── scripts/
+│   ├── backup.sh         一致性备份（VACUUM INTO + 打包 + 轮转）
+│   └── restore.sh        恢复（校验 → 快照 → 覆盖 → 比对行数）
 ├── deploy.sh             一键部署
 ├── Dockerfile
 ├── docker-compose.yml

@@ -5,3 +5,5 @@ config.json
 config.local.json
 .DS_Store
 *.eml
+backups/
+pre-restore-*.tar.gz
